@@ -430,18 +430,21 @@ class _StudentsPageState extends State<StudentsPage>
     if (ok == true && name.text.trim().isNotEmpty) {
       final group =
           widget.store.groups.where((g) => g.id == groupId).firstOrNull;
-      widget.store.updateStaffUser(
-        userId: existing.id,
-        fullName: name.text.trim(),
-        login: login.text.trim(),
-        password: password.text.trim(),
-        role: role,
-        groupId: groupId,
-        direction: group?.direction,
-        sector: group?.sector,
-        paymentAmount: int.tryParse(payment.text) ?? 0,
-        studiedMonths: int.tryParse(studied.text) ?? 0,
-        totalMonths: int.tryParse(total.text) ?? 0,
+      await safeMutate(
+        context,
+        () => widget.store.updateStaffUser(
+          userId: existing.id,
+          fullName: name.text.trim(),
+          login: login.text.trim(),
+          password: password.text.trim(),
+          role: role,
+          groupId: groupId,
+          direction: group?.direction,
+          sector: group?.sector,
+          paymentAmount: int.tryParse(payment.text) ?? 0,
+          studiedMonths: int.tryParse(studied.text) ?? 0,
+          totalMonths: int.tryParse(total.text) ?? 0,
+        ),
       );
     }
   }
@@ -557,17 +560,20 @@ class _StudentsPageState extends State<StudentsPage>
     if (ok == true && name.text.trim().isNotEmpty) {
       final group =
           widget.store.groups.where((g) => g.id == groupId).firstOrNull;
-      widget.store.addUser(
-        fullName: name.text.trim(),
-        login: login.text.trim(),
-        password: password.text.trim(),
-        role: role,
-        groupId: groupId,
-        direction: group?.direction,
-        sector: group?.sector,
-        paymentAmount: int.tryParse(payment.text) ?? 0,
-        studiedMonths: int.tryParse(studied.text) ?? 0,
-        totalMonths: int.tryParse(total.text) ?? 0,
+      await safeMutate(
+        context,
+        () => widget.store.addUser(
+          fullName: name.text.trim(),
+          login: login.text.trim(),
+          password: password.text.trim(),
+          role: role,
+          groupId: groupId,
+          direction: group?.direction,
+          sector: group?.sector,
+          paymentAmount: int.tryParse(payment.text) ?? 0,
+          studiedMonths: int.tryParse(studied.text) ?? 0,
+          totalMonths: int.tryParse(total.text) ?? 0,
+        ),
       );
     }
   }
@@ -626,11 +632,14 @@ class _StudentsPageState extends State<StudentsPage>
       ),
     );
     if (ok == true && teacher != null && name.text.trim().isNotEmpty) {
-      widget.store.addGroup(
-        name: name.text.trim(),
-        direction: direction.text.trim(),
-        teacherId: teacher!.id,
-        sector: sector,
+      await safeMutate(
+        context,
+        () => widget.store.addGroup(
+          name: name.text.trim(),
+          direction: direction.text.trim(),
+          teacherId: teacher!.id,
+          sector: sector,
+        ),
       );
     }
   }
@@ -723,14 +732,16 @@ class _StudentsPageState extends State<StudentsPage>
     );
 
     if (ok == true && groupId != null) {
-      for (final s in groupStudents()) {
-        widget.store.markAttendance(
-          groupId: groupId!,
-          studentId: s.id,
-          present: present[s.id] ?? true,
-          grade: grades[s.id] ?? 7,
-        );
-      }
+      await safeMutate(context, () async {
+        for (final s in groupStudents()) {
+          await widget.store.markAttendance(
+            groupId: groupId!,
+            studentId: s.id,
+            present: present[s.id] ?? true,
+            grade: grades[s.id] ?? 7,
+          );
+        }
+      });
     }
   }
 
@@ -790,11 +801,14 @@ class _StudentsPageState extends State<StudentsPage>
       ),
     );
     if (ok == true && groupId != null && title.text.trim().isNotEmpty) {
-      widget.store.addMaterial(
-        groupId: groupId!,
-        title: title.text.trim(),
-        type: type,
-        urlOrNote: note.text.trim(),
+      await safeMutate(
+        context,
+        () => widget.store.addMaterial(
+          groupId: groupId!,
+          title: title.text.trim(),
+          type: type,
+          urlOrNote: note.text.trim(),
+        ),
       );
     }
   }

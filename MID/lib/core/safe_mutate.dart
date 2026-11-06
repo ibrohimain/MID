@@ -1,15 +1,31 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../data/api/api_client.dart';
 
 /// Dialog yopilgach focus scrollni pastga otkazmasligi uchun:
 /// avval unfocus, keyin keyingi frame'da mutatsiya.
 Future<void> safeMutate(
   BuildContext context,
-  VoidCallback mutate,
+  FutureOr<void> Function() mutate,
 ) async {
   FocusManager.instance.primaryFocus?.unfocus();
   await Future<void>.delayed(Duration.zero);
   if (!context.mounted) return;
-  mutate();
+  try {
+    await mutate();
+  } on ApiException catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message)),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Xatolik: $e')),
+    );
+  }
 }
 
 Future<bool> confirmDelete(

@@ -172,21 +172,23 @@ class AnnouncementsPage extends StatelessWidget {
     );
 
     if (ok == true && title.text.trim().isNotEmpty) {
-      if (existing == null) {
-        store.addAnnouncement(
-          title: title.text.trim(),
-          body: body.text.trim(),
-          authorId: user.id,
-          audience: audience,
-        );
-      } else {
-        store.updateAnnouncement(
-          id: existing.id,
-          title: title.text.trim(),
-          body: body.text.trim(),
-          audience: audience,
-        );
-      }
+      await safeMutate(context, () async {
+        if (existing == null) {
+          await store.addAnnouncement(
+            title: title.text.trim(),
+            body: body.text.trim(),
+            authorId: user.id,
+            audience: audience,
+          );
+        } else {
+          await store.updateAnnouncement(
+            id: existing.id,
+            title: title.text.trim(),
+            body: body.text.trim(),
+            audience: audience,
+          );
+        }
+      });
     }
   }
 }

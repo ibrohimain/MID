@@ -283,7 +283,9 @@ class _EmployeesPageState extends State<EmployeesPage> {
     );
 
     if (ok == true && name.text.trim().isNotEmpty) {
-      if (widget.store.loginTaken(login.text, exceptUserId: existing.id)) {
+      final taken = await widget.store
+          .loginTaken(login.text, exceptUserId: existing.id);
+      if (taken) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Bu login band')),
@@ -291,15 +293,18 @@ class _EmployeesPageState extends State<EmployeesPage> {
         }
         return;
       }
-      widget.store.updateStaffUser(
-        userId: existing.id,
-        fullName: name.text.trim(),
-        login: login.text.trim(),
-        password: password.text.trim(),
-        sector: sector,
-        departmentId: deptId,
-        position: position,
-        salary: int.tryParse(salary.text) ?? 0,
+      await safeMutate(
+        context,
+        () => widget.store.updateStaffUser(
+          userId: existing.id,
+          fullName: name.text.trim(),
+          login: login.text.trim(),
+          password: password.text.trim(),
+          sector: sector,
+          departmentId: deptId,
+          position: position,
+          salary: int.tryParse(salary.text) ?? 0,
+        ),
       );
     }
   }
@@ -434,7 +439,8 @@ class _EmployeesPageState extends State<EmployeesPage> {
     if (ok == true &&
         name.text.trim().isNotEmpty &&
         login.text.trim().isNotEmpty) {
-      if (widget.store.loginTaken(login.text)) {
+      final taken = await widget.store.loginTaken(login.text);
+      if (taken) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Bu login band')),
@@ -442,15 +448,18 @@ class _EmployeesPageState extends State<EmployeesPage> {
         }
         return;
       }
-      widget.store.addUser(
-        fullName: name.text.trim(),
-        login: login.text.trim(),
-        password: password.text.trim(),
-        role: role,
-        sector: sector,
-        departmentId: deptId,
-        position: position,
-        salary: int.tryParse(salary.text) ?? 0,
+      await safeMutate(
+        context,
+        () => widget.store.addUser(
+          fullName: name.text.trim(),
+          login: login.text.trim(),
+          password: password.text.trim(),
+          role: role,
+          sector: sector,
+          departmentId: deptId,
+          position: position,
+          salary: int.tryParse(salary.text) ?? 0,
+        ),
       );
     }
   }

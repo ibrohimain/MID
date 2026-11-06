@@ -3,11 +3,13 @@ import 'package:flutter/foundation.dart';
 import '../models/app_user.dart';
 import '../models/domain.dart';
 import '../models/user_role.dart';
+import 'api/api_client.dart';
+import 'api/json_mappers.dart';
 
 class MidStore extends ChangeNotifier {
-  MidStore() {
-    _seed();
-  }
+  MidStore({ApiClient? api}) : api = api ?? ApiClient();
+
+  final ApiClient api;
 
   final List<AppUser> users = [];
   final List<TaskItem> tasks = [];
@@ -22,19 +24,120 @@ class MidStore extends ChangeNotifier {
 
   int companyCash = 0;
   int reserveCash = 0;
-  int _seq = 100;
+  bool loading = false;
+  String? lastError;
 
-  String _id(String prefix) {
-    _seq++;
-    return '$prefix-$_seq';
+  Future<AppUser> login(String login, String password) async {
+    final data = await api.post('/auth/login', body: {
+      'login': login,
+      'password': password,
+    }) as Map<String, dynamic>;
+    api.setToken(data['access_token'] as String);
+    final user = userFromJson(data['user'] as Map<String, dynamic>);
+    await refreshAll();
+    return userById(user.id) ?? user;
   }
 
-  String _receipt() {
-    _seq++;
-    return 'CHK-${DateTime.now().year}-$_seq';
+  void logout() {
+    api.setToken(null);
+    users.clear();
+    tasks.clear();
+    projects.clear();
+    projectUpdates.clear();
+    finances.clear();
+    departments.clear();
+    groups.clear();
+    attendance.clear();
+    materials.clear();
+    announcements.clear();
+    companyCash = 0;
+    reserveCash = 0;
+    notifyListeners();
+  }
+
+  Future<void> refreshAll() async {
+    loading = true;
+    lastError = null;
+    notifyListeners();
+    try {
+      final data = await api.get('/bootstrap') as Map<String, dynamic>;
+      _applyBootstrap(data);
+    } catch (e) {
+      lastError = e.toString();
+      rethrow;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  void _applyBootstrap(Map<String, dynamic> data) {
+    users
+      ..clear()
+      ..addAll(
+        (data['users'] as List<dynamic>)
+            .map((e) => userFromJson(e as Map<String, dynamic>)),
+      );
+    tasks
+      ..clear()
+      ..addAll(
+        (data['tasks'] as List<dynamic>)
+            .map((e) => taskFromJson(e as Map<String, dynamic>)),
+      );
+    projects
+      ..clear()
+      ..addAll(
+        (data['projects'] as List<dynamic>)
+            .map((e) => projectFromJson(e as Map<String, dynamic>)),
+      );
+    projectUpdates
+      ..clear()
+      ..addAll(
+        (data['project_updates'] as List<dynamic>)
+            .map((e) => projectUpdateFromJson(e as Map<String, dynamic>)),
+      );
+    finances
+      ..clear()
+      ..addAll(
+        (data['finances'] as List<dynamic>)
+            .map((e) => financeFromJson(e as Map<String, dynamic>)),
+      );
+    departments
+      ..clear()
+      ..addAll(
+        (data['departments'] as List<dynamic>)
+            .map((e) => departmentFromJson(e as Map<String, dynamic>)),
+      );
+    groups
+      ..clear()
+      ..addAll(
+        (data['groups'] as List<dynamic>)
+            .map((e) => groupFromJson(e as Map<String, dynamic>)),
+      );
+    attendance
+      ..clear()
+      ..addAll(
+        (data['attendance'] as List<dynamic>)
+            .map((e) => attendanceFromJson(e as Map<String, dynamic>)),
+      );
+    materials
+      ..clear()
+      ..addAll(
+        (data['materials'] as List<dynamic>)
+            .map((e) => materialFromJson(e as Map<String, dynamic>)),
+      );
+    announcements
+      ..clear()
+      ..addAll(
+        (data['announcements'] as List<dynamic>)
+            .map((e) => announcementFromJson(e as Map<String, dynamic>)),
+      );
+    companyCash = (data['company_cash'] as num).toInt();
+    reserveCash = (data['reserve_cash'] as num).toInt();
   }
 
   AppUser? findByLogin(String login, String password) {
+    // Local fallback unused when API is connected.
     try {
       return users.firstWhere(
         (u) =>
@@ -111,7 +214,7 @@ class MidStore extends ChangeNotifier {
       projects.where((p) => p.stage.toLowerCase() != 'yopilgan').toList();
 
   // --- Users ---
-  AppUser addUser({
+  Future<AppUser> addUser({
     required String fullName,
     required String login,
     required String password,
@@ -126,24 +229,24 @@ class MidStore extends ChangeNotifier {
     int paymentAmount = 0,
     int studiedMonths = 0,
     int totalMonths = 0,
-  }) {
-    final user = AppUser(
-      id: _id('u'),
-      fullName: fullName,
-      login: login,
-      password: password,
-      role: role,
-      sector: sector,
-      departmentId: departmentId,
-      position: position,
-      email: email,
-      groupId: groupId,
-      direction: direction,
-      salary: salary,
-      paymentAmount: paymentAmount,
-      studiedMonths: studiedMonths,
-      totalMonths: totalMonths,
-    );
+  }) async {
+    final data = await api.post('/users', body: {
+      'full_name': fullName,
+      'login': login,
+      'password': password,
+      'role': role.name,
+      'sector': sectorToApi(sector),
+      'department_id': departmentId,
+      'position': position,
+      'email': email,
+      'group_id': groupId,
+      'direction': direction,
+      'salary': salary,
+      'payment_amount': paymentAmount,
+      'studied_months': studiedMonths,
+      'total_months': totalMonths,
+    }) as Map<String, dynamic>;
+    final user = userFromJson(data);
     users.add(user);
     notifyListeners();
     return user;
@@ -153,84 +256,96 @@ class MidStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateProfile({
+  Future<void> updateProfile({
     required String userId,
     String? fullName,
     String? email,
     String? phone,
     String? password,
-  }) {
-    final user = userById(userId);
-    if (user == null) return;
-    if (fullName != null && fullName.trim().isNotEmpty) {
-      user.fullName = fullName.trim();
-    }
-    if (email != null) user.email = email.trim();
-    if (phone != null) user.phone = phone.trim();
-    if (password != null && password.trim().isNotEmpty) {
-      user.password = password.trim();
+  }) async {
+    final data = await api.patch('/auth/me', body: {
+      if (fullName != null) 'full_name': fullName,
+      if (email != null) 'email': email,
+      if (phone != null) 'phone': phone,
+      if (password != null && password.isNotEmpty) 'password': password,
+    }) as Map<String, dynamic>;
+    final updated = userFromJson(data);
+    final idx = users.indexWhere((u) => u.id == userId);
+    if (idx >= 0) {
+      // keep password visible for managers if present
+      final prev = users[idx];
+      users[idx] = AppUser(
+        id: updated.id,
+        fullName: updated.fullName,
+        login: updated.login,
+        password: updated.password.isNotEmpty ? updated.password : prev.password,
+        role: updated.role,
+        sector: updated.sector,
+        departmentId: updated.departmentId,
+        position: updated.position,
+        email: updated.email,
+        phone: updated.phone,
+        groupId: updated.groupId,
+        direction: updated.direction,
+        salary: updated.salary,
+        paymentAmount: updated.paymentAmount,
+        studiedMonths: updated.studiedMonths,
+        totalMonths: updated.totalMonths,
+        active: updated.active,
+      );
     }
     notifyListeners();
   }
 
-  /// Soft-delete: tizimdan chiqaradi, login ishlamaydi.
-  bool deleteUser(String userId, {required UserRole actorRole}) {
+  Future<bool> deleteUser(String userId, {required UserRole actorRole}) async {
+    await api.delete('/users/$userId');
     final target = userById(userId);
-    if (target == null) return false;
-    if (target.role == UserRole.direktor) return false;
-    if (actorRole == UserRole.rahbar &&
-        (target.role == UserRole.rahbar || target.role == UserRole.direktor)) {
-      return false;
-    }
-    if (actorRole != UserRole.direktor && actorRole != UserRole.rahbar) {
-      return false;
-    }
-    target.active = false;
+    if (target != null) target.active = false;
     notifyListeners();
     return true;
   }
 
-  bool loginTaken(String login, {String? exceptUserId}) {
-    final needle = login.trim().toLowerCase();
-    return users.any(
-      (u) =>
-          u.active &&
-          u.login.toLowerCase() == needle &&
-          u.id != exceptUserId,
-    );
+  Future<bool> loginTaken(String login, {String? exceptUserId}) async {
+    final data = await api.get('/users/check-login', query: {
+      'login': login,
+      if (exceptUserId != null) 'except_user_id': exceptUserId,
+    }) as Map<String, dynamic>;
+    return data['taken'] as bool? ?? false;
   }
 
   // --- Tasks ---
-  TaskItem assignTask({
+  Future<TaskItem> assignTask({
     required String title,
     required String description,
     required String assigneeId,
     required String createdById,
     required TaskPriority priority,
     String? projectId,
-  }) {
-    final task = TaskItem(
-      id: _id('t'),
-      title: title,
-      description: description,
-      assigneeId: assigneeId,
-      createdById: createdById,
-      status: TaskStatus.yangi,
-      priority: priority,
-      projectId: projectId,
-    );
+  }) async {
+    final data = await api.post('/tasks', body: {
+      'title': title,
+      'description': description,
+      'assignee_id': assigneeId,
+      'priority': priority.name,
+      'project_id': projectId,
+    }) as Map<String, dynamic>;
+    final task = taskFromJson(data);
     tasks.insert(0, task);
     notifyListeners();
     return task;
   }
 
-  void setTaskStatus(String taskId, TaskStatus status) {
-    final t = tasks.firstWhere((e) => e.id == taskId);
-    t.status = status;
+  Future<void> setTaskStatus(String taskId, TaskStatus status) async {
+    final data = await api.patch('/tasks/$taskId/status', body: {
+      'status': status.name,
+    }) as Map<String, dynamic>;
+    final updated = taskFromJson(data);
+    final idx = tasks.indexWhere((e) => e.id == taskId);
+    if (idx >= 0) tasks[idx] = updated;
     notifyListeners();
   }
 
-  void updateTask({
+  Future<void> updateTask({
     required String taskId,
     required String title,
     required String description,
@@ -238,24 +353,29 @@ class MidStore extends ChangeNotifier {
     required TaskPriority priority,
     required TaskStatus status,
     String? projectId,
-  }) {
-    final t = tasks.firstWhere((e) => e.id == taskId);
-    t.title = title;
-    t.description = description;
-    t.assigneeId = assigneeId;
-    t.priority = priority;
-    t.status = status;
-    t.projectId = projectId;
+  }) async {
+    final data = await api.patch('/tasks/$taskId', body: {
+      'title': title,
+      'description': description,
+      'assignee_id': assigneeId,
+      'priority': priority.name,
+      'status': status.name,
+      'project_id': projectId,
+    }) as Map<String, dynamic>;
+    final updated = taskFromJson(data);
+    final idx = tasks.indexWhere((e) => e.id == taskId);
+    if (idx >= 0) tasks[idx] = updated;
     notifyListeners();
   }
 
-  void deleteTask(String taskId) {
+  Future<void> deleteTask(String taskId) async {
+    await api.delete('/tasks/$taskId');
     tasks.removeWhere((e) => e.id == taskId);
     notifyListeners();
   }
 
   // --- Projects ---
-  ProjectItem addProject({
+  Future<ProjectItem> addProject({
     required String name,
     required String description,
     required String stage,
@@ -264,25 +384,24 @@ class MidStore extends ChangeNotifier {
     required int expense,
     required Sector sector,
     List<String> assigneeIds = const [],
-  }) {
-    final p = ProjectItem(
-      id: _id('p'),
-      name: name,
-      description: description,
-      stage: stage,
-      requiredBudget: requiredBudget,
-      investment: investment,
-      expense: expense,
-      sector: sector,
-      assigneeIds: List.of(assigneeIds),
-      parts: {},
-    );
+  }) async {
+    final data = await api.post('/projects', body: {
+      'name': name,
+      'description': description,
+      'stage': stage,
+      'required_budget': requiredBudget,
+      'investment': investment,
+      'expense': expense,
+      'sector': sector.name,
+      'assignee_ids': assigneeIds,
+    }) as Map<String, dynamic>;
+    final p = projectFromJson(data);
     projects.insert(0, p);
     notifyListeners();
     return p;
   }
 
-  void updateProject({
+  Future<void> updateProject({
     required String projectId,
     required String name,
     required String description,
@@ -291,62 +410,79 @@ class MidStore extends ChangeNotifier {
     required int investment,
     required int expense,
     required Sector sector,
-  }) {
-    final p = projects.firstWhere((e) => e.id == projectId);
-    p.name = name;
-    p.description = description;
-    p.stage = stage;
-    p.requiredBudget = requiredBudget;
-    p.investment = investment;
-    p.expense = expense;
-    p.sector = sector;
+  }) async {
+    final data = await api.patch('/projects/$projectId', body: {
+      'name': name,
+      'description': description,
+      'stage': stage,
+      'required_budget': requiredBudget,
+      'investment': investment,
+      'expense': expense,
+      'sector': sector.name,
+    }) as Map<String, dynamic>;
+    final updated = projectFromJson(data);
+    final idx = projects.indexWhere((e) => e.id == projectId);
+    if (idx >= 0) {
+      updated.assigneeIds = projects[idx].assigneeIds;
+      updated.parts = projects[idx].parts;
+      projects[idx] = updated;
+    }
     notifyListeners();
   }
 
-  void setProjectStage(String projectId, String stage) {
-    final p = projects.firstWhere((e) => e.id == projectId);
-    p.stage = stage;
+  Future<void> setProjectStage(String projectId, String stage) async {
+    final data = await api.patch('/projects/$projectId/stage', body: {
+      'stage': stage,
+    }) as Map<String, dynamic>;
+    final updated = projectFromJson(data);
+    final idx = projects.indexWhere((e) => e.id == projectId);
+    if (idx >= 0) {
+      updated.assigneeIds = projects[idx].assigneeIds;
+      updated.parts = projects[idx].parts;
+      projects[idx] = updated;
+    }
     notifyListeners();
   }
 
-  void deleteProject(String projectId) {
+  Future<void> deleteProject(String projectId) async {
+    await api.delete('/projects/$projectId');
     projects.removeWhere((e) => e.id == projectId);
     projectUpdates.removeWhere((e) => e.projectId == projectId);
     notifyListeners();
   }
 
-  void assignEmployeeToProjectPart({
+  Future<void> assignEmployeeToProjectPart({
     required String projectId,
     required String partName,
     required String employeeId,
-  }) {
-    final p = projects.firstWhere((e) => e.id == projectId);
-    p.parts = {...p.parts, partName: employeeId};
-    if (!p.assigneeIds.contains(employeeId)) {
-      p.assigneeIds = [...p.assigneeIds, employeeId];
-    }
+  }) async {
+    final data = await api.put('/projects/$projectId/parts', body: {
+      'part_name': partName,
+      'employee_id': employeeId,
+    }) as Map<String, dynamic>;
+    final updated = projectFromJson(data);
+    final idx = projects.indexWhere((e) => e.id == projectId);
+    if (idx >= 0) projects[idx] = updated;
     notifyListeners();
   }
 
-  ProjectUpdate addProjectUpdate({
+  Future<ProjectUpdate> addProjectUpdate({
     required String projectId,
     required String authorId,
     required String title,
     required String body,
-  }) {
-    final u = ProjectUpdate(
-      id: _id('pu'),
-      projectId: projectId,
-      authorId: authorId,
-      title: title,
-      body: body,
-    );
+  }) async {
+    final data = await api.post('/projects/$projectId/updates', body: {
+      'title': title,
+      'body': body,
+    }) as Map<String, dynamic>;
+    final u = projectUpdateFromJson(data);
     projectUpdates.insert(0, u);
     notifyListeners();
     return u;
   }
 
-  void deleteProjectUpdate(String updateId) {
+  Future<void> deleteProjectUpdate(String updateId) async {
     projectUpdates.removeWhere((e) => e.id == updateId);
     notifyListeners();
   }
@@ -355,38 +491,42 @@ class MidStore extends ChangeNotifier {
       projectUpdates.where((e) => e.projectId == projectId).toList();
 
   // --- Announcements ---
-  Announcement addAnnouncement({
+  Future<Announcement> addAnnouncement({
     required String title,
     required String body,
     required String authorId,
     required AnnouncementAudience audience,
-  }) {
-    final a = Announcement(
-      id: _id('an'),
-      title: title,
-      body: body,
-      authorId: authorId,
-      audience: audience,
-    );
+  }) async {
+    final data = await api.post('/announcements', body: {
+      'title': title,
+      'body': body,
+      'audience': audience.name,
+    }) as Map<String, dynamic>;
+    final a = announcementFromJson(data);
     announcements.insert(0, a);
     notifyListeners();
     return a;
   }
 
-  void updateAnnouncement({
+  Future<void> updateAnnouncement({
     required String id,
     required String title,
     required String body,
     required AnnouncementAudience audience,
-  }) {
-    final a = announcements.firstWhere((e) => e.id == id);
-    a.title = title;
-    a.body = body;
-    a.audience = audience;
+  }) async {
+    final data = await api.patch('/announcements/$id', body: {
+      'title': title,
+      'body': body,
+      'audience': audience.name,
+    }) as Map<String, dynamic>;
+    final updated = announcementFromJson(data);
+    final idx = announcements.indexWhere((e) => e.id == id);
+    if (idx >= 0) announcements[idx] = updated;
     notifyListeners();
   }
 
-  void deleteAnnouncement(String id) {
+  Future<void> deleteAnnouncement(String id) async {
+    await api.delete('/announcements/$id');
     announcements.removeWhere((e) => e.id == id);
     notifyListeners();
   }
@@ -404,68 +544,59 @@ class MidStore extends ChangeNotifier {
   }
 
   // --- Finance ---
-  void _applyFinance(FinanceType type, int amount, {required bool reverse}) {
-    final signed = reverse ? -amount : amount;
-    switch (type) {
-      case FinanceType.kirim:
-        companyCash += signed;
-      case FinanceType.chiqim:
-      case FinanceType.maosh:
-      case FinanceType.ajratma:
-        companyCash -= signed;
-      case FinanceType.zaxira:
-        companyCash -= signed;
-        reserveCash += signed;
-    }
-  }
-
-  FinanceRecord addFinance({
+  Future<FinanceRecord> addFinance({
     required String title,
     required int amount,
     required FinanceType type,
     String note = '',
     String? relatedUserId,
     String? projectId,
-  }) {
-    final rec = FinanceRecord(
-      id: _id('f'),
-      title: title,
-      amount: amount,
-      type: type,
-      receiptNo: _receipt(),
-      note: note,
-      relatedUserId: relatedUserId,
-      projectId: projectId,
-    );
+  }) async {
+    final data = await api.post('/finance/records', body: {
+      'title': title,
+      'amount': amount,
+      'type': type.name,
+      'note': note,
+      'related_user_id': relatedUserId,
+      'project_id': projectId,
+    }) as Map<String, dynamic>;
+    final rec = financeFromJson(data);
     finances.insert(0, rec);
-    _applyFinance(type, amount, reverse: false);
+    final summary = await api.get('/finance/summary') as Map<String, dynamic>;
+    companyCash = (summary['company_cash'] as num).toInt();
+    reserveCash = (summary['reserve_cash'] as num).toInt();
     notifyListeners();
     return rec;
   }
 
-  void updateFinance({
+  Future<void> updateFinance({
     required String id,
     required String title,
     required int amount,
     required FinanceType type,
     String note = '',
-  }) {
-    final rec = finances.firstWhere((e) => e.id == id);
-    _applyFinance(rec.type, rec.amount, reverse: true);
-    rec.title = title;
-    rec.amount = amount;
-    rec.type = type;
-    rec.note = note;
-    _applyFinance(type, amount, reverse: false);
+  }) async {
+    final data = await api.patch('/finance/records/$id', body: {
+      'title': title,
+      'amount': amount,
+      'type': type.name,
+      'note': note,
+    }) as Map<String, dynamic>;
+    final updated = financeFromJson(data);
+    final idx = finances.indexWhere((e) => e.id == id);
+    if (idx >= 0) finances[idx] = updated;
+    final summary = await api.get('/finance/summary') as Map<String, dynamic>;
+    companyCash = (summary['company_cash'] as num).toInt();
+    reserveCash = (summary['reserve_cash'] as num).toInt();
     notifyListeners();
   }
 
-  void deleteFinance(String id) {
-    final idx = finances.indexWhere((e) => e.id == id);
-    if (idx < 0) return;
-    final rec = finances[idx];
-    _applyFinance(rec.type, rec.amount, reverse: true);
-    finances.removeAt(idx);
+  Future<void> deleteFinance(String id) async {
+    await api.delete('/finance/records/$id');
+    finances.removeWhere((e) => e.id == id);
+    final summary = await api.get('/finance/summary') as Map<String, dynamic>;
+    companyCash = (summary['company_cash'] as num).toInt();
+    reserveCash = (summary['reserve_cash'] as num).toInt();
     notifyListeners();
   }
 
@@ -485,52 +616,65 @@ class MidStore extends ChangeNotifier {
       .fold(0, (s, f) => s + f.amount);
 
   // --- Departments ---
-  DepartmentItem addDepartment({
+  Future<DepartmentItem> addDepartment({
     required String name,
     required Sector sector,
     required String headId,
     required List<String> positions,
-  }) {
-    final d = DepartmentItem(
-      id: _id('d'),
-      name: name,
-      sector: sector,
-      headId: headId,
-      positions: List.of(positions),
-    );
+  }) async {
+    final data = await api.post('/departments', body: {
+      'name': name,
+      'sector': sector.name,
+      'head_id': headId,
+      'positions': positions,
+    }) as Map<String, dynamic>;
+    final d = departmentFromJson(data);
     departments.add(d);
     notifyListeners();
     return d;
   }
 
-  void setDepartmentPositions(String id, List<String> positions) {
-    final d = departments.firstWhere((e) => e.id == id);
-    d.positions = List.of(positions);
-    notifyListeners();
+  Future<void> setDepartmentPositions(String id, List<String> positions) async {
+    await updateDepartment(
+      id: id,
+      name: departments.firstWhere((e) => e.id == id).name,
+      sector: departments.firstWhere((e) => e.id == id).sector,
+      headId: departments.firstWhere((e) => e.id == id).headId,
+      positions: positions,
+    );
   }
 
-  void updateDepartment({
+  Future<void> updateDepartment({
     required String id,
     required String name,
     required Sector sector,
     required String headId,
     required List<String> positions,
-  }) {
-    final d = departments.firstWhere((e) => e.id == id);
-    d.name = name;
-    d.sector = sector;
-    d.headId = headId;
-    d.positions = List.of(positions);
+  }) async {
+    final data = await api.patch('/departments/$id', body: {
+      'name': name,
+      'sector': sector.name,
+      'head_id': headId,
+      'positions': positions,
+    }) as Map<String, dynamic>;
+    final updated = departmentFromJson(data);
+    final idx = departments.indexWhere((e) => e.id == id);
+    if (idx >= 0) departments[idx] = updated;
     notifyListeners();
   }
 
-  void assignDepartmentHead(String departmentId, String headId) {
-    final d = departments.firstWhere((e) => e.id == departmentId);
-    d.headId = headId;
+  Future<void> assignDepartmentHead(String departmentId, String headId) async {
+    final data = await api.patch('/departments/$departmentId/head', body: {
+      'head_id': headId,
+    }) as Map<String, dynamic>;
+    final updated = departmentFromJson(data);
+    final idx = departments.indexWhere((e) => e.id == departmentId);
+    if (idx >= 0) departments[idx] = updated;
     notifyListeners();
   }
 
-  void deleteDepartment(String id) {
+  Future<void> deleteDepartment(String id) async {
+    await api.delete('/departments/$id');
     departments.removeWhere((e) => e.id == id);
     for (final u in users.where((u) => u.departmentId == id)) {
       u.departmentId = null;
@@ -538,7 +682,7 @@ class MidStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateStaffUser({
+  Future<void> updateStaffUser({
     required String userId,
     required String fullName,
     required String login,
@@ -555,82 +699,86 @@ class MidStore extends ChangeNotifier {
     int? studiedMonths,
     int? totalMonths,
     UserRole? role,
-  }) {
-    final u = userById(userId);
-    if (u == null) return;
-    u.fullName = fullName;
-    u.login = login;
-    u.password = password;
-    if (sector != null) u.sector = sector;
-    if (departmentId != null) u.departmentId = departmentId;
-    if (position != null) u.position = position;
-    if (salary != null) u.salary = salary;
-    if (email != null) u.email = email;
-    if (phone != null) u.phone = phone;
-    if (groupId != null) u.groupId = groupId;
-    if (direction != null) u.direction = direction;
-    if (paymentAmount != null) u.paymentAmount = paymentAmount;
-    if (studiedMonths != null) u.studiedMonths = studiedMonths;
-    if (totalMonths != null) u.totalMonths = totalMonths;
-    if (role != null && role != UserRole.direktor) u.role = role;
+  }) async {
+    final data = await api.patch('/users/$userId', body: {
+      'full_name': fullName,
+      'login': login,
+      if (password.trim().isNotEmpty) 'password': password,
+      if (sector != null) 'sector': sector.name,
+      if (departmentId != null) 'department_id': departmentId,
+      if (position != null) 'position': position,
+      if (salary != null) 'salary': salary,
+      if (email != null) 'email': email,
+      if (phone != null) 'phone': phone,
+      if (groupId != null) 'group_id': groupId,
+      if (direction != null) 'direction': direction,
+      if (paymentAmount != null) 'payment_amount': paymentAmount,
+      if (studiedMonths != null) 'studied_months': studiedMonths,
+      if (totalMonths != null) 'total_months': totalMonths,
+      if (role != null && role != UserRole.direktor) 'role': role.name,
+    }) as Map<String, dynamic>;
+    final updated = userFromJson(data);
+    final idx = users.indexWhere((u) => u.id == userId);
+    if (idx >= 0) users[idx] = updated;
     notifyListeners();
   }
 
   // --- Education ---
-  StudyGroup addGroup({
+  Future<StudyGroup> addGroup({
     required String name,
     required String direction,
     required String teacherId,
     Sector? sector,
-  }) {
-    final g = StudyGroup(
-      id: _id('g'),
-      name: name,
-      direction: direction,
-      teacherId: teacherId,
-      sector: sector,
-    );
+  }) async {
+    final data = await api.post('/groups', body: {
+      'name': name,
+      'direction': direction,
+      'teacher_id': teacherId,
+      'sector': sectorToApi(sector),
+    }) as Map<String, dynamic>;
+    final g = groupFromJson(data);
     groups.add(g);
     notifyListeners();
     return g;
   }
 
-  void markAttendance({
+  Future<void> markAttendance({
     required String groupId,
     required String studentId,
     required bool present,
     required int grade,
     DateTime? date,
-  }) {
-    attendance.add(
-      AttendanceRecord(
-        id: _id('a'),
-        groupId: groupId,
-        studentId: studentId,
-        date: date ?? DateTime.now(),
-        present: present,
-        grade: grade.clamp(1, 10),
-      ),
-    );
+  }) async {
+    final list = await api.post('/attendance/bulk', body: {
+      'group_id': groupId,
+      if (date != null) 'date': date.toIso8601String(),
+      'records': [
+        {
+          'student_id': studentId,
+          'present': present,
+          'grade': grade.clamp(1, 10),
+        }
+      ],
+    }) as List<dynamic>;
+    for (final item in list) {
+      attendance.add(attendanceFromJson(item as Map<String, dynamic>));
+    }
     notifyListeners();
   }
 
-  void addMaterial({
+  Future<void> addMaterial({
     required String groupId,
     required String title,
     required StudyMaterialKind type,
     String urlOrNote = '',
-  }) {
-    materials.insert(
-      0,
-      StudyMaterial(
-        id: _id('m'),
-        groupId: groupId,
-        title: title,
-        type: type,
-        urlOrNote: urlOrNote,
-      ),
-    );
+  }) async {
+    final data = await api.post('/materials', body: {
+      'group_id': groupId,
+      'title': title,
+      'type': type.name,
+      'url_or_note': urlOrNote,
+    }) as Map<String, dynamic>;
+    materials.insert(0, materialFromJson(data));
     notifyListeners();
   }
 
@@ -644,379 +792,5 @@ class MidStore extends ChangeNotifier {
     final ranked = [...learners]
       ..sort((a, b) => averageGrade(b.id).compareTo(averageGrade(a.id)));
     return ranked.take(limit).toList();
-  }
-
-  void _seed() {
-    final director = AppUser(
-      id: 'u-dir',
-      fullName: 'Aziza Karimova',
-      login: 'direktor',
-      password: '1234',
-      role: UserRole.direktor,
-      position: 'Direktor',
-      email: 'direktor@mid.uz',
-      salary: 25000000,
-    );
-    final rahbarA = AppUser(
-      id: 'u-ra',
-      fullName: 'Bekzod Tursunov',
-      login: 'rahbar_a',
-      password: 'a12345',
-      role: UserRole.rahbar,
-      sector: Sector.a,
-      position: 'A sektor rahbari',
-      email: 'rahbar.a@mid.uz',
-      phone: '+998 90 111 22 33',
-      salary: 18000000,
-    );
-    final rahbarB = AppUser(
-      id: 'u-rb',
-      fullName: 'Nilufar Saidova',
-      login: 'rahbar_b',
-      password: 'b12345',
-      role: UserRole.rahbar,
-      sector: Sector.b,
-      position: 'B sektor rahbari',
-      email: 'rahbar.b@mid.uz',
-      phone: '+998 90 444 55 66',
-      salary: 18000000,
-    );
-    users.addAll([director, rahbarA, rahbarB]);
-
-    final deptA1 = DepartmentItem(
-      id: 'd-a1',
-      name: 'Loyihalar',
-      sector: Sector.a,
-      headId: rahbarA.id,
-      positions: ['Loyiha menejeri', 'Product owner', 'Analitik'],
-    );
-    final deptA2 = DepartmentItem(
-      id: 'd-a2',
-      name: "O'quv",
-      sector: Sector.a,
-      headId: rahbarA.id,
-      positions: ['Mentor', "O'qituvchi", 'Kurator'],
-    );
-    final deptB1 = DepartmentItem(
-      id: 'd-b1',
-      name: 'Moliya',
-      sector: Sector.b,
-      headId: rahbarB.id,
-      positions: ['Moliyaviy analitik', 'Buxgalter', 'Investitsiya menejeri'],
-    );
-    final deptB2 = DepartmentItem(
-      id: 'd-b2',
-      name: 'HR',
-      sector: Sector.b,
-      headId: rahbarB.id,
-      positions: ['HR mutaxassisi', 'Rekruter'],
-    );
-    departments.addAll([deptA1, deptA2, deptB1, deptB2]);
-
-    final jasur = AppUser(
-      id: 'u-x1',
-      fullName: 'Jasur Aliyev',
-      login: 'jasur',
-      password: '1234',
-      role: UserRole.xodim,
-      sector: Sector.a,
-      departmentId: deptA1.id,
-      position: 'Loyiha menejeri',
-      salary: 9000000,
-    );
-    final dilshod = AppUser(
-      id: 'u-x2',
-      fullName: 'Dilshod Normatov',
-      login: 'dilshod',
-      password: '1234',
-      role: UserRole.xodim,
-      sector: Sector.a,
-      departmentId: deptA2.id,
-      position: 'Mentor',
-      salary: 8000000,
-    );
-    final malika = AppUser(
-      id: 'u-x3',
-      fullName: 'Malika Ergasheva',
-      login: 'malika',
-      password: '1234',
-      role: UserRole.xodim,
-      sector: Sector.b,
-      departmentId: deptB1.id,
-      position: 'Moliyaviy analitik',
-      salary: 8500000,
-    );
-    final odil = AppUser(
-      id: 'u-x4',
-      fullName: 'Odil Hasanov',
-      login: 'odil',
-      password: '1234',
-      role: UserRole.xodim,
-      sector: Sector.b,
-      departmentId: deptB2.id,
-      position: 'HR mutaxassisi',
-      salary: 7000000,
-    );
-    users.addAll([jasur, dilshod, malika, odil]);
-
-    final gFlutter = StudyGroup(
-      id: 'g-1',
-      name: 'Flutter-01',
-      direction: 'Flutter',
-      teacherId: dilshod.id,
-      sector: Sector.a,
-    );
-    final gUx = StudyGroup(
-      id: 'g-2',
-      name: 'UIUX-02',
-      direction: 'UI/UX',
-      teacherId: dilshod.id,
-      sector: Sector.a,
-    );
-    groups.addAll([gFlutter, gUx]);
-
-    final madina = AppUser(
-      id: 'u-o1',
-      fullName: 'Madina Yusupova',
-      login: 'madina',
-      password: '1234',
-      role: UserRole.oquvchi,
-      sector: Sector.a,
-      groupId: gFlutter.id,
-      direction: 'Flutter',
-      paymentAmount: 3500000,
-      studiedMonths: 4,
-      totalMonths: 9,
-    );
-    final sardor = AppUser(
-      id: 'u-s1',
-      fullName: 'Sardor Rahimov',
-      login: 'sardor',
-      password: '1234',
-      role: UserRole.shogirt,
-      sector: Sector.a,
-      groupId: gFlutter.id,
-      direction: 'Flutter',
-      paymentAmount: 0,
-      studiedMonths: 2,
-      totalMonths: 6,
-    );
-    final dilnoza = AppUser(
-      id: 'u-o2',
-      fullName: 'Dilnoza Ergasheva',
-      login: 'dilnoza',
-      password: '1234',
-      role: UserRole.oquvchi,
-      sector: Sector.a,
-      groupId: gUx.id,
-      direction: 'UI/UX',
-      paymentAmount: 3000000,
-      studiedMonths: 3,
-      totalMonths: 8,
-    );
-    users.addAll([madina, sardor, dilnoza]);
-
-    projects.addAll([
-      ProjectItem(
-        id: 'p-1',
-        name: 'EduLink',
-        description: "Ta'lim platformasi MVP va mentor marketplace.",
-        stage: 'MVP',
-        requiredBudget: 150000000,
-        investment: 120000000,
-        expense: 48000000,
-        sector: Sector.a,
-        assigneeIds: [jasur.id, sardor.id],
-        parts: {
-          'Frontend': jasur.id,
-          'Amaliyot': sardor.id,
-        },
-      ),
-      ProjectItem(
-        id: 'p-2',
-        name: 'PayNest',
-        description: "To'lov va investitsiya kuzatuv tizimi.",
-        stage: 'Growth',
-        requiredBudget: 250000000,
-        investment: 210000000,
-        expense: 96000000,
-        sector: Sector.b,
-        assigneeIds: [malika.id],
-        parts: {'Moliya moduli': malika.id},
-      ),
-      ProjectItem(
-        id: 'p-3',
-        name: 'AgroSense',
-        description: 'Agro sensor monitoring startup.',
-        stage: "Boshlanish",
-        requiredBudget: 100000000,
-        investment: 85000000,
-        expense: 12000000,
-        sector: Sector.a,
-        assigneeIds: [],
-        parts: {},
-      ),
-    ]);
-
-    tasks.addAll([
-      TaskItem(
-        id: 't-1',
-        title: 'Pitch deck yangilash',
-        description: 'EduLink investorlar uchun deck.',
-        assigneeId: jasur.id,
-        createdById: rahbarA.id,
-        status: TaskStatus.jarayonda,
-        priority: TaskPriority.yuqori,
-        projectId: 'p-1',
-      ),
-      TaskItem(
-        id: 't-2',
-        title: 'Haftalik moliya hisoboti',
-        description: 'Kirim-chiqim va zaxira.',
-        assigneeId: malika.id,
-        createdById: rahbarB.id,
-        status: TaskStatus.javobBerildi,
-        priority: TaskPriority.yuqori,
-        projectId: 'p-2',
-      ),
-      TaskItem(
-        id: 't-3',
-        title: 'Yangi mentor sessiyasi',
-        description: 'Flutter-01 guruhiga sessiyа.',
-        assigneeId: dilshod.id,
-        createdById: rahbarA.id,
-        status: TaskStatus.yangi,
-        priority: TaskPriority.orta,
-      ),
-    ]);
-
-    companyCash = 420000000;
-    reserveCash = 80000000;
-
-    finances.addAll([
-      FinanceRecord(
-        id: 'f-1',
-        title: 'Investitsiya — EduLink',
-        amount: 120000000,
-        type: FinanceType.kirim,
-        receiptNo: 'CHK-2026-1',
-        projectId: 'p-1',
-      ),
-      FinanceRecord(
-        id: 'f-2',
-        title: 'Ofis ijarasi',
-        amount: 25000000,
-        type: FinanceType.chiqim,
-        receiptNo: 'CHK-2026-2',
-      ),
-      FinanceRecord(
-        id: 'f-3',
-        title: 'Maosh — Jasur Aliyev',
-        amount: 9000000,
-        type: FinanceType.maosh,
-        receiptNo: 'CHK-2026-3',
-        relatedUserId: jasur.id,
-      ),
-      FinanceRecord(
-        id: 'f-4',
-        title: 'Zaxira fondiga ajratish',
-        amount: 80000000,
-        type: FinanceType.zaxira,
-        receiptNo: 'CHK-2026-4',
-        note: 'Yillik zaxira',
-      ),
-      FinanceRecord(
-        id: 'f-5',
-        title: 'Marketing budjeti',
-        amount: 15000000,
-        type: FinanceType.ajratma,
-        receiptNo: 'CHK-2026-5',
-      ),
-    ]);
-
-    attendance.addAll([
-      AttendanceRecord(
-        id: 'a-1',
-        groupId: gFlutter.id,
-        studentId: madina.id,
-        date: DateTime.now().subtract(const Duration(days: 1)),
-        present: true,
-        grade: 9,
-      ),
-      AttendanceRecord(
-        id: 'a-2',
-        groupId: gFlutter.id,
-        studentId: sardor.id,
-        date: DateTime.now().subtract(const Duration(days: 1)),
-        present: true,
-        grade: 8,
-      ),
-      AttendanceRecord(
-        id: 'a-3',
-        groupId: gUx.id,
-        studentId: dilnoza.id,
-        date: DateTime.now().subtract(const Duration(days: 1)),
-        present: true,
-        grade: 10,
-      ),
-    ]);
-
-    materials.addAll([
-      StudyMaterial(
-        id: 'm-1',
-        groupId: gFlutter.id,
-        title: 'Widget tree asoslari',
-        type: StudyMaterialKind.darslik,
-        urlOrNote: 'pdf/flutter-widgets.pdf',
-      ),
-      StudyMaterial(
-        id: 'm-2',
-        groupId: gFlutter.id,
-        title: 'Uy vazifa #4',
-        type: StudyMaterialKind.uyVazifa,
-        urlOrNote: 'ListView + model',
-      ),
-      StudyMaterial(
-        id: 'm-3',
-        groupId: gUx.id,
-        title: 'Figma prototip video',
-        type: StudyMaterialKind.video,
-        urlOrNote: 'https://mid.uz/video/figma-01',
-      ),
-    ]);
-
-    projectUpdates.add(
-      ProjectUpdate(
-        id: 'pu-1',
-        projectId: 'p-1',
-        authorId: director.id,
-        title: 'MVP demo tayyor',
-        body: 'EduLink asosiy oqimlar sinovdan o‘tdi. Keyingi qadam — investor demo.',
-      ),
-    );
-
-    announcements.addAll([
-      Announcement(
-        id: 'an-1',
-        title: 'Haftalik yig‘ilish',
-        body: 'Juma soat 16:00 da barcha xodimlar uchun yig‘ilish.',
-        authorId: director.id,
-        audience: AnnouncementAudience.xodimlar,
-      ),
-      Announcement(
-        id: 'an-2',
-        title: 'Amaliyot yangiligi',
-        body: 'Shogirtlar uchun yangi mentor sessiyasi dushanba kuni.',
-        authorId: rahbarA.id,
-        audience: AnnouncementAudience.shogirtlar,
-      ),
-      Announcement(
-        id: 'an-3',
-        title: 'Umumiy e’lon',
-        body: 'MID tizimida yangi funksiyalar yoqildi — profil va e’lonlar.',
-        authorId: director.id,
-        audience: AnnouncementAudience.barcha,
-      ),
-    ]);
   }
 }

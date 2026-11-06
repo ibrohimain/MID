@@ -286,22 +286,24 @@ class FinancePage extends StatelessWidget {
     );
 
     if (ok == true && title.text.trim().isNotEmpty) {
-      if (existing == null) {
-        store.addFinance(
-          title: title.text.trim(),
-          amount: int.tryParse(amount.text) ?? 0,
-          type: type,
-          note: note.text.trim(),
-        );
-      } else {
-        store.updateFinance(
-          id: existing.id,
-          title: title.text.trim(),
-          amount: int.tryParse(amount.text) ?? 0,
-          type: type,
-          note: note.text.trim(),
-        );
-      }
+      await safeMutate(context, () async {
+        if (existing == null) {
+          await store.addFinance(
+            title: title.text.trim(),
+            amount: int.tryParse(amount.text) ?? 0,
+            type: type,
+            note: note.text.trim(),
+          );
+        } else {
+          await store.updateFinance(
+            id: existing.id,
+            title: title.text.trim(),
+            amount: int.tryParse(amount.text) ?? 0,
+            type: type,
+            note: note.text.trim(),
+          );
+        }
+      });
     }
   }
 

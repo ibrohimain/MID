@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/safe_mutate.dart';
 import '../../core/theme/mid_colors.dart';
 import '../../data/mid_store.dart';
 import '../../models/app_user.dart';
@@ -56,7 +57,7 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     setState(() {
       _message = null;
       _ok = false;
@@ -83,14 +84,20 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     }
 
-    widget.store.updateProfile(
-      userId: widget.user.id,
-      fullName: _name.text,
-      email: _email.text,
-      phone: _phone.text,
-      password: changingPass ? _newPass.text : null,
-    );
-    widget.auth.refreshUser();
+    await safeMutate(context, () async {
+      await widget.store.updateProfile(
+        userId: widget.user.id,
+        fullName: _name.text,
+        email: _email.text,
+        phone: _phone.text,
+        password: changingPass ? _newPass.text : null,
+      );
+      if (changingPass) {
+        widget.user.password = _newPass.text.trim();
+      }
+      widget.auth.refreshUser();
+    });
+    if (!mounted) return;
     _currentPass.clear();
     _newPass.clear();
     _confirmPass.clear();
