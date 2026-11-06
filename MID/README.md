@@ -5,10 +5,30 @@ Yagona boshqaruv paneli — Direktor, 2 Rahbar (A/B sektor), xodim, o‘quvchi, 
 ```
 MID/
 ├── lib/          # Flutter UI
-└── backend/      # FastAPI + SQLite
+├── backend/      # FastAPI + SQLite
+├── deploy/       # production scripts
+└── docker-compose.yml
 ```
 
-## 1. Backend
+## Production (Docker)
+
+```bash
+cd MID
+# serverda:
+docker compose --env-file .env up -d --build
+```
+
+Default port: **8100** (`MID_HTTP_PORT`).
+
+Deploy helper (local → VPS):
+
+```bash
+set MID_SSH_PASSWORD=...
+set MID_SSH_HOST=...
+python deploy/push_deploy.py
+```
+
+## Local backend
 
 ```bash
 cd backend
@@ -18,19 +38,11 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API docs: http://127.0.0.1:8000/docs
-
-## 2. Frontend
+## Local frontend
 
 ```bash
 flutter pub get
 flutter run -d chrome
-```
-
-Boshqa host/port:
-
-```bash
-flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
 
 ## Demo loginlar

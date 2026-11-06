@@ -1,0 +1,12 @@
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.db
+**/.dart_tool
+**/build
+**/.idea
+**/.vscode
+**/*.md
+.git
+backend/.venv
+backend/mid.db

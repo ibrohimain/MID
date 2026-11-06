@@ -1,11 +1,20 @@
+import 'package:flutter/foundation.dart';
+
 /// Backend base URL.
-/// Chrome/desktop: localhost. Android emulator: 10.0.2.2.
-/// Override: flutter run --dart-define=API_BASE_URL=http://192.168.x.x:8000
+/// - Web (production, same host): empty → `/api/v1`
+/// - Local native/web: `http://127.0.0.1:8000`
+/// Override: `--dart-define=API_BASE_URL=https://example.com`
 class ApiConfig {
-  static const String baseUrl = String.fromEnvironment(
+  static const String _fromEnv = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:8000',
+    defaultValue: '__unset__',
   );
+
+  static String get baseUrl {
+    if (_fromEnv != '__unset__') return _fromEnv;
+    if (kIsWeb) return '';
+    return 'http://127.0.0.1:8000';
+  }
 
   static const String apiPrefix = '/api/v1';
 
