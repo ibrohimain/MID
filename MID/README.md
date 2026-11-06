@@ -2,15 +2,16 @@
 
 Yagona boshqaruv paneli — Direktor, 2 Rahbar (A/B sektor), xodim, o‘quvchi, shogirt.
 
-## Talablar
+```
+MID/
+├── lib/          # Flutter UI
+└── backend/      # FastAPI + SQLite
+```
 
-1. **Backend** (Python / FastAPI) — `../backend`
-2. **Flutter** SDK
-
-## Backendni ishga tushirish
+## 1. Backend
 
 ```bash
-cd ../backend
+cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -19,10 +20,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 API docs: http://127.0.0.1:8000/docs
 
-## Frontendni ishga tushirish
+## 2. Frontend
 
 ```bash
-cd MID
 flutter pub get
 flutter run -d chrome
 ```
@@ -30,7 +30,7 @@ flutter run -d chrome
 Boshqa host/port:
 
 ```bash
-flutter run -d chrome --dart-define=API_BASE_URL=http://192.168.1.10:8000
+flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
 
 ## Demo loginlar
