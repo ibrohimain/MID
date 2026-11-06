@@ -12,19 +12,28 @@ from app.routers import (
     departments,
     education,
     finance,
+    positions,
     projects,
     tasks,
     users,
 )
-from app.seed import seed_if_empty
+from app.seed import (
+    ensure_job_titles,
+    ensure_schema,
+    reconcile_company_cash,
+    seed_if_empty,
+)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine, checkfirst=True)
+    ensure_schema(engine)
     db = SessionLocal()
     try:
         seed_if_empty(db)
+        ensure_job_titles(db)
+        reconcile_company_cash(db)
     finally:
         db.close()
     yield
@@ -48,6 +57,7 @@ app.include_router(tasks.router, prefix=prefix)
 app.include_router(projects.router, prefix=prefix)
 app.include_router(finance.router, prefix=prefix)
 app.include_router(departments.router, prefix=prefix)
+app.include_router(positions.router, prefix=prefix)
 app.include_router(education.router, prefix=prefix)
 app.include_router(announcements.router, prefix=prefix)
 app.include_router(dashboard.router, prefix=prefix)

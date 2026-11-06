@@ -12,6 +12,9 @@ class ApiConfig {
 
   static String get baseUrl {
     if (_fromEnv != '__unset__') return _fromEnv;
+    // Local debug (Chrome/desktop) → FastAPI :8000
+    if (kDebugMode) return 'http://127.0.0.1:8000';
+    // Production web: same host via nginx
     if (kIsWeb) return '';
     return 'http://127.0.0.1:8000';
   }

@@ -51,6 +51,16 @@ class User(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class JobTitle(Base):
+    """Direktor tomonidan kiritiladigan global lavozimlar."""
+
+    __tablename__ = "job_titles"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
 class Department(Base):
     __tablename__ = "departments"
 
@@ -85,9 +95,12 @@ class Project(Base):
     required_budget: Mapped[int] = mapped_column(Integer, default=0)
     investment: Mapped[int] = mapped_column(Integer, default=0)
     expense: Mapped[int] = mapped_column(Integer, default=0)
+    # a | b | both
     sector: Mapped[str] = mapped_column(String(8))
     assignee_ids: Mapped[list] = mapped_column(JSON, default=list)
     parts: Mapped[dict] = mapped_column(JSON, default=dict)
+    # xodim_id -> loyihadagi lavozim (asosiy lavozimidan farq qilishi mumkin)
+    member_positions: Mapped[dict] = mapped_column(JSON, default=dict)
 
     updates: Mapped[list["ProjectUpdate"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"

@@ -5,9 +5,12 @@ import '../../models/user_role.dart';
 UserRole parseRole(String value) => UserRole.values.byName(value);
 
 Sector? parseSector(String? value) {
-  if (value == null || value.isEmpty) return null;
+  if (value == null || value.isEmpty || value == 'both') return null;
   return Sector.values.byName(value);
 }
+
+ProjectSector parseProjectSector(String value) =>
+    ProjectSector.values.byName(value);
 
 String? sectorToApi(Sector? s) => s?.name;
 
@@ -57,6 +60,11 @@ ProjectItem projectFromJson(Map<String, dynamic> j) {
   if (partsRaw is Map) {
     partsRaw.forEach((k, v) => parts['$k'] = '$v');
   }
+  final mpRaw = j['member_positions'];
+  final memberPositions = <String, String>{};
+  if (mpRaw is Map) {
+    mpRaw.forEach((k, v) => memberPositions['$k'] = '$v');
+  }
   final assignees = (j['assignee_ids'] as List<dynamic>? ?? [])
       .map((e) => e as String)
       .toList();
@@ -68,9 +76,18 @@ ProjectItem projectFromJson(Map<String, dynamic> j) {
     requiredBudget: (j['required_budget'] as num).toInt(),
     investment: (j['investment'] as num).toInt(),
     expense: (j['expense'] as num).toInt(),
-    sector: parseSector(j['sector'] as String)!,
+    sector: parseProjectSector(j['sector'] as String),
     assigneeIds: assignees,
     parts: parts,
+    memberPositions: memberPositions,
+  );
+}
+
+JobTitleItem jobTitleFromJson(Map<String, dynamic> j) {
+  return JobTitleItem(
+    id: j['id'] as String,
+    name: j['name'] as String,
+    active: j['active'] as bool? ?? true,
   );
 }
 

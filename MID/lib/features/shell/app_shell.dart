@@ -12,6 +12,7 @@ import '../dashboard/dashboard_page.dart';
 import '../departments/departments_page.dart';
 import '../employees/employees_page.dart';
 import '../finance/finance_page.dart';
+import '../positions/positions_page.dart';
 import '../profile/profile_page.dart';
 import '../projects/projects_page.dart';
 import '../students/students_page.dart';
@@ -50,6 +51,7 @@ class _AppShellState extends State<AppShell> {
         MidPage.employees => EmployeesPage(user: user, store: store),
         MidPage.students => StudentsPage(user: user, store: store),
         MidPage.departments => DepartmentsPage(user: user, store: store),
+        MidPage.positions => PositionsPage(user: user, store: store),
         MidPage.announcements =>
             AnnouncementsPage(user: user, store: store),
         MidPage.profile => ProfilePage(

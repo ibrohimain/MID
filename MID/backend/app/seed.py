@@ -202,8 +202,13 @@ def seed_if_empty(db: Session) -> None:
             investment=120_000_000,
             expense=48_000_000,
             sector="a",
-            assignee_ids=[jasur.id, sardor.id],
+            assignee_ids=[rahbar_a.id, jasur.id, sardor.id],
             parts={"Frontend": jasur.id, "Amaliyot": sardor.id},
+            member_positions={
+                rahbar_a.id: "Loyiha rahbari",
+                jasur.id: "Frontend dasturchi",
+                sardor.id: "Shogirt",
+            },
         ),
         Project(
             id="p-2",
@@ -214,8 +219,12 @@ def seed_if_empty(db: Session) -> None:
             investment=210_000_000,
             expense=96_000_000,
             sector="b",
-            assignee_ids=[malika.id],
+            assignee_ids=[rahbar_b.id, malika.id],
             parts={"Moliya moduli": malika.id},
+            member_positions={
+                rahbar_b.id: "Loyiha rahbari",
+                malika.id: "Moliyaviy analitik",
+            },
         ),
         Project(
             id="p-3",
@@ -225,9 +234,13 @@ def seed_if_empty(db: Session) -> None:
             required_budget=100_000_000,
             investment=85_000_000,
             expense=12_000_000,
-            sector="a",
-            assignee_ids=[],
+            sector="both",
+            assignee_ids=[rahbar_a.id, rahbar_b.id],
             parts={},
+            member_positions={
+                rahbar_a.id: "Loyiha rahbari",
+                rahbar_b.id: "Loyiha rahbari",
+            },
         ),
     ]
 
@@ -263,45 +276,19 @@ def seed_if_empty(db: Session) -> None:
         ),
     ]
 
-    finances = [
-        FinanceRecord(
-            id="f-1",
-            title="Investitsiya — EduLink",
-            amount=120_000_000,
-            type="kirim",
-            receipt_no="CHK-2026-1",
-            project_id="p-1",
-        ),
-        FinanceRecord(
-            id="f-2",
-            title="Ofis ijarasi",
-            amount=25_000_000,
-            type="chiqim",
-            receipt_no="CHK-2026-2",
-        ),
-        FinanceRecord(
-            id="f-3",
-            title="Maosh — Jasur Aliyev",
-            amount=9_000_000,
-            type="maosh",
-            receipt_no="CHK-2026-3",
-            related_user_id=jasur.id,
-        ),
-        FinanceRecord(
-            id="f-4",
-            title="Zaxira fondiga ajratish",
-            amount=80_000_000,
-            type="zaxira",
-            receipt_no="CHK-2026-4",
-            note="Yillik zaxira",
-        ),
-        FinanceRecord(
-            id="f-5",
-            title="Marketing budjeti",
-            amount=15_000_000,
-            type="ajratma",
-            receipt_no="CHK-2026-5",
-        ),
+    # Moliya mock yo'q — kampaniya puli 0, foydalanuvchi chek orqali kiritadi.
+    finances: list[FinanceRecord] = []
+
+    from app.models import JobTitle
+
+    job_titles = [
+        JobTitle(id="jt-1", name="Loyiha menejeri"),
+        JobTitle(id="jt-2", name="Product owner"),
+        JobTitle(id="jt-3", name="Analitik"),
+        JobTitle(id="jt-4", name="Mentor"),
+        JobTitle(id="jt-5", name="Moliyaviy analitik"),
+        JobTitle(id="jt-6", name="Frontend dasturchi"),
+        JobTitle(id="jt-7", name="Backend dasturchi"),
     ]
 
     yesterday = datetime.utcnow() - timedelta(days=1)
@@ -392,8 +379,8 @@ def seed_if_empty(db: Session) -> None:
 
     balance = AppBalance(
         id=1,
-        company_cash=420_000_000,
-        reserve_cash=80_000_000,
+        company_cash=0,
+        reserve_cash=0,
         seq=200,
     )
 
@@ -408,6 +395,7 @@ def seed_if_empty(db: Session) -> None:
     learner_users = [madina, sardor, dilnoza]
 
     db.add(balance)
+    db.add_all(job_titles)
     db.add_all([dept_a1, dept_a2, dept_b1, dept_b2])
     db.add_all(staff_users)
     db.flush()
@@ -421,4 +409,76 @@ def seed_if_empty(db: Session) -> None:
     db.add_all(materials)
     db.add_all(updates)
     db.add_all(announcements)
+    db.commit()
+
+
+def ensure_schema(engine) -> None:
+    """Mavjud SQLite jadvaliga yangi ustun/jadval qo'shish."""
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        cols = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()
+        }
+        if cols and "member_positions" not in cols:
+            conn.execute(
+                text(
+                    "ALTER TABLE projects ADD COLUMN member_positions TEXT "
+                    "DEFAULT '{}'"
+                )
+            )
+
+
+def ensure_job_titles(db: Session) -> None:
+    from sqlalchemy import select
+
+    from app.models import JobTitle
+    from app.services import next_id
+
+    defaults = [
+        "Loyiha menejeri",
+        "Product owner",
+        "Analitik",
+        "Mentor",
+        "Moliyaviy analitik",
+        "Frontend dasturchi",
+        "Backend dasturchi",
+        "Loyiha rahbari",
+    ]
+    existing = {
+        r.name for r in db.scalars(select(JobTitle)).all()
+    }
+    for name in defaults:
+        if name not in existing:
+            db.add(JobTitle(id=next_id(db, "jt"), name=name, active=True))
+    db.commit()
+
+
+def reconcile_company_cash(db: Session) -> None:
+    """Kampaniya puli faqat cheklar asosida; mock qoldiqni tozalaydi."""
+    from sqlalchemy import select
+
+    from app.models import FinanceRecord
+    from app.services import get_balance
+
+    bal = get_balance(db)
+    seed_ids = {"f-1", "f-2", "f-3", "f-4", "f-5"}
+    for row in list(db.scalars(select(FinanceRecord)).all()):
+        if row.id in seed_ids:
+            db.delete(row)
+    db.flush()
+
+    cash = 0
+    reserve = 0
+    for row in db.scalars(select(FinanceRecord)).all():
+        if row.type == "kirim":
+            cash += row.amount
+        elif row.type in {"chiqim", "maosh", "ajratma"}:
+            cash -= row.amount
+        elif row.type == "zaxira":
+            cash -= row.amount
+            reserve += row.amount
+    bal.company_cash = cash
+    bal.reserve_cash = reserve
     db.commit()

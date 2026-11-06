@@ -88,6 +88,7 @@ class ProjectItem {
     required this.sector,
     this.assigneeIds = const [],
     this.parts = const {},
+    this.memberPositions = const {},
   });
 
   final String id;
@@ -97,13 +98,26 @@ class ProjectItem {
   int requiredBudget;
   int investment;
   int expense;
-  Sector sector;
+  ProjectSector sector;
   List<String> assigneeIds;
   Map<String, String> parts; // partName -> employeeId
+  Map<String, String> memberPositions; // userId -> loyihadagi lavozim
 
   int get balance => investment - expense;
   int get remainingNeed =>
       (requiredBudget - investment).clamp(0, requiredBudget);
+}
+
+class JobTitleItem {
+  JobTitleItem({
+    required this.id,
+    required this.name,
+    this.active = true,
+  });
+
+  final String id;
+  String name;
+  bool active;
 }
 
 enum AnnouncementAudience { barcha, xodimlar, shogirtlar, oquvchilar }

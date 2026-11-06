@@ -92,6 +92,23 @@ class ProjectsPage extends StatelessWidget {
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 8),
+                    if (p.memberPositions.isNotEmpty) ...[
+                      Text(
+                        'Jamoa lavozimlari',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      ...p.memberPositions.entries.map((e) {
+                        final emp = store.userById(e.key);
+                        return Text(
+                          '${emp?.fullName ?? e.key}: ${e.value}',
+                        );
+                      }),
+                      const SizedBox(height: 14),
+                    ],
                     if (p.parts.isEmpty)
                       const Text(
                         "Hali qismga xodim biriktirilmagan",
@@ -100,7 +117,12 @@ class ProjectsPage extends StatelessWidget {
                     else
                       ...p.parts.entries.map((e) {
                         final emp = store.userById(e.value);
-                        return Text('${e.key}: ${emp?.fullName ?? e.value}');
+                        final role = p.memberPositions[e.value];
+                        final rolePart =
+                            role != null && role.isNotEmpty ? ' · $role' : '';
+                        return Text(
+                          '${e.key}: ${emp?.fullName ?? e.value}$rolePart',
+                        );
                       }),
                     const SizedBox(height: 14),
                     Text(
@@ -306,7 +328,8 @@ class ProjectsPage extends StatelessWidget {
         TextEditingController(text: '${existing?.investment ?? 0}');
     final expense =
         TextEditingController(text: '${existing?.expense ?? 0}');
-    var sector = existing?.sector ?? user.sector ?? Sector.a;
+    var sector = existing?.sector ??
+        (user.sector == Sector.b ? ProjectSector.b : ProjectSector.a);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -356,14 +379,18 @@ class ProjectsPage extends StatelessWidget {
                     decoration: const InputDecoration(labelText: 'Xarajat'),
                     keyboardType: TextInputType.number,
                   ),
-                  DropdownButtonFormField<Sector>(
+                  DropdownButtonFormField<ProjectSector>(
                     value: sector,
-                    items: Sector.values
+                    items: ProjectSector.values
                         .map((s) =>
                             DropdownMenuItem(value: s, child: Text(s.label)))
                         .toList(),
                     onChanged: (v) => setLocal(() => sector = v ?? sector),
-                    decoration: const InputDecoration(labelText: 'Sektor'),
+                    decoration: const InputDecoration(
+                      labelText: 'Jamoa (A / B / ikkala)',
+                      helperText:
+                          'Ikkala tanlansa — har ikki rahbarga ish yuklanadi',
+                    ),
                   ),
                 ],
               ),
@@ -413,7 +440,13 @@ class ProjectsPage extends StatelessWidget {
 
   Future<void> _assignPart(BuildContext context, String projectId) async {
     final part = TextEditingController();
+    final titles = store.jobTitleNames;
     AppUser? emp = store.staffOnly.firstOrNull;
+    String? position = titles.isNotEmpty
+        ? (emp?.position != null && titles.contains(emp!.position)
+            ? emp!.position
+            : titles.first)
+        : emp?.position;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -436,13 +469,38 @@ class ProjectsPage extends StatelessWidget {
                       .map(
                         (e) => DropdownMenuItem(
                           value: e,
-                          child: Text(e.fullName),
+                          child: Text(
+                            '${e.fullName}${e.position != null ? ' · ${e.position}' : ''}',
+                          ),
                         ),
                       )
                       .toList(),
-                  onChanged: (v) => setLocal(() => emp = v),
+                  onChanged: (v) => setLocal(() {
+                    emp = v;
+                    final pos = v?.position;
+                    if (pos != null && titles.contains(pos)) {
+                      position = pos;
+                    }
+                  }),
                   decoration: const InputDecoration(labelText: 'Xodim'),
                 ),
+                if (titles.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    value: position != null && titles.contains(position)
+                        ? position
+                        : titles.first,
+                    items: titles
+                        .map(
+                          (p) => DropdownMenuItem(value: p, child: Text(p)),
+                        )
+                        .toList(),
+                    onChanged: (v) => setLocal(() => position = v),
+                    decoration: const InputDecoration(
+                      labelText: 'Loyihadagi lavozim',
+                      helperText:
+                          'Asosiy lavozimidan farq qilishi mumkin',
+                    ),
+                  ),
               ],
             ),
           ),
@@ -466,6 +524,7 @@ class ProjectsPage extends StatelessWidget {
           projectId: projectId,
           partName: part.text.trim(),
           employeeId: emp!.id,
+          position: position,
         ),
       );
     }

@@ -229,21 +229,40 @@ class DepartmentsPage extends StatelessWidget {
     BuildContext context,
     DepartmentItem d,
   ) async {
-    final name = TextEditingController();
-    final login = TextEditingController();
-    final password = TextEditingController(text: '1234');
-    final salary = TextEditingController(text: '7000000');
-    final customPosition = TextEditingController();
-    String? position =
-        d.positions.isNotEmpty ? d.positions.first : null;
+    final catalog = store.staffOnly
+        .where((u) => u.departmentId != d.id)
+        .toList();
+    final titles = store.jobTitleNames;
+    if (catalog.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Katalogda bo'sh xodim yo'q. Avval Xodimlar sahifasidan qo'shing.",
+          ),
+        ),
+      );
+      return;
+    }
+    if (titles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Avval Lavozimlar sahifasidan lavozim kiriting (Direktor).",
+          ),
+        ),
+      );
+      return;
+    }
+
+    AppUser? selected = catalog.first;
+    String? position = titles.first;
     var makeHead = false;
-    var useCustomPosition = d.positions.isEmpty;
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: Text("${d.name} — xodim qo'shish"),
+          title: Text("${d.name} — katalogdan xodim"),
           content: SizedBox(
             width: 440,
             child: SingleChildScrollView(
@@ -255,51 +274,36 @@ class DepartmentsPage extends StatelessWidget {
                     style: const TextStyle(color: MidColors.navyMuted),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: name,
-                    decoration: const InputDecoration(labelText: 'F.I.Sh'),
-                  ),
-                  TextField(
-                    controller: login,
-                    decoration: const InputDecoration(labelText: 'Login'),
-                  ),
-                  TextField(
-                    controller: password,
-                    decoration: const InputDecoration(labelText: 'Parol'),
-                  ),
-                  if (d.positions.isNotEmpty && !useCustomPosition)
-                    DropdownButtonFormField<String>(
-                      value: position,
-                      items: d.positions
-                          .map(
-                            (p) => DropdownMenuItem(value: p, child: Text(p)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setLocal(() => position = v),
-                      decoration: const InputDecoration(labelText: 'Lavozim'),
+                  DropdownButtonFormField<AppUser>(
+                    value: selected,
+                    items: catalog
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              '${e.fullName}'
+                              '${e.position != null ? ' · ${e.position}' : ''}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setLocal(() => selected = v),
+                    decoration: const InputDecoration(
+                      labelText: 'Xodim (katalog)',
                     ),
-                  if (useCustomPosition || d.positions.isEmpty)
-                    TextField(
-                      controller: customPosition,
-                      decoration: const InputDecoration(
-                        labelText: 'Yangi lavozim nomi',
-                      ),
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: position,
+                    items: titles
+                        .map(
+                          (p) => DropdownMenuItem(value: p, child: Text(p)),
+                        )
+                        .toList(),
+                    onChanged: (v) => setLocal(() => position = v),
+                    decoration: const InputDecoration(
+                      labelText: 'Lavozim',
+                      helperText: 'Lavozimlar sahifasidan',
                     ),
-                  if (d.positions.isNotEmpty)
-                    TextButton(
-                      onPressed: () => setLocal(
-                        () => useCustomPosition = !useCustomPosition,
-                      ),
-                      child: Text(
-                        useCustomPosition
-                            ? "Mavjud lavozimdan tanlash"
-                            : "Yangi lavozim yozish",
-                      ),
-                    ),
-                  TextField(
-                    controller: salary,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Maosh'),
                   ),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
@@ -318,60 +322,24 @@ class DepartmentsPage extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text("Qo'shish"),
+              child: const Text('Biriktirish'),
             ),
           ],
         ),
       ),
     );
 
-    if (ok != true || name.text.trim().isEmpty || login.text.trim().isEmpty) {
-      return;
-    }
-    final taken = await store.loginTaken(login.text);
-    if (taken) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bu login band')),
-        );
-      }
-      return;
-    }
+    if (ok != true || selected == null || (position ?? '').isEmpty) return;
 
-    final pos = useCustomPosition || d.positions.isEmpty
-        ? customPosition.text.trim()
-        : (position ?? '');
-    if (pos.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lavozimni yozing')),
-        );
-      }
-      return;
-    }
-
-    await safeMutate(context, () async {
-      if (useCustomPosition || d.positions.isEmpty) {
-        if (!d.positions.contains(pos)) {
-          await store.setDepartmentPositions(d.id, [...d.positions, pos]);
-        }
-      }
-
-      final created = await store.addUser(
-        fullName: name.text.trim(),
-        login: login.text.trim(),
-        password: password.text.trim(),
-        role: UserRole.xodim,
-        sector: d.sector,
+    await safeMutate(
+      context,
+      () => store.assignStaffToDepartment(
         departmentId: d.id,
-        position: pos,
-        salary: int.tryParse(salary.text) ?? 0,
-      );
-
-      if (makeHead) {
-        await store.assignDepartmentHead(d.id, created.id);
-      }
-    });
+        userId: selected!.id,
+        position: position!,
+        makeHead: makeHead,
+      ),
+    );
   }
 
   Future<void> _assignHead(BuildContext context, DepartmentItem d) async {

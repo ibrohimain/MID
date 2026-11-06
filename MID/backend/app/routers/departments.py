@@ -9,6 +9,7 @@ from app.schemas import (
     DepartmentCreate,
     DepartmentHeadUpdate,
     DepartmentOut,
+    DepartmentStaffAssign,
     DepartmentUpdate,
 )
 from app.services import next_id
@@ -77,6 +78,37 @@ def assign_head(
     if dept is None:
         raise HTTPException(404, "Bo'lim topilmadi")
     dept.head_id = body.head_id
+    db.commit()
+    db.refresh(dept)
+    return dept
+
+
+@router.post("/{dept_id}/staff", response_model=DepartmentOut)
+def assign_staff_from_catalog(
+    dept_id: str,
+    body: DepartmentStaffAssign,
+    _: User = Depends(require_leadership),
+    db: Session = Depends(get_db),
+) -> Department:
+    """Katalogdan mavjud xodimni bo'limga biriktirish + lavozim."""
+    dept = db.get(Department, dept_id)
+    if dept is None:
+        raise HTTPException(404, "Bo'lim topilmadi")
+    user = db.get(User, body.user_id)
+    if user is None or not user.active or user.role != "xodim":
+        raise HTTPException(400, "Katalogdan faqat faol xodim tanlanadi")
+    pos = body.position.strip()
+    if not pos:
+        raise HTTPException(400, "Lavozim majburiy")
+    user.department_id = dept.id
+    user.sector = dept.sector
+    user.position = pos
+    positions = list(dept.positions or [])
+    if pos not in positions:
+        positions.append(pos)
+        dept.positions = positions
+    if body.make_head:
+        dept.head_id = user.id
     db.commit()
     db.refresh(dept)
     return dept

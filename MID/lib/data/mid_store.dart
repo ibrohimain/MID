@@ -17,6 +17,7 @@ class MidStore extends ChangeNotifier {
   final List<ProjectUpdate> projectUpdates = [];
   final List<FinanceRecord> finances = [];
   final List<DepartmentItem> departments = [];
+  final List<JobTitleItem> jobTitles = [];
   final List<StudyGroup> groups = [];
   final List<AttendanceRecord> attendance = [];
   final List<StudyMaterial> materials = [];
@@ -46,6 +47,7 @@ class MidStore extends ChangeNotifier {
     projectUpdates.clear();
     finances.clear();
     departments.clear();
+    jobTitles.clear();
     groups.clear();
     attendance.clear();
     materials.clear();
@@ -107,6 +109,12 @@ class MidStore extends ChangeNotifier {
       ..addAll(
         (data['departments'] as List<dynamic>)
             .map((e) => departmentFromJson(e as Map<String, dynamic>)),
+      );
+    jobTitles
+      ..clear()
+      ..addAll(
+        (data['job_titles'] as List<dynamic>? ?? [])
+            .map((e) => jobTitleFromJson(e as Map<String, dynamic>)),
       );
     groups
       ..clear()
@@ -382,7 +390,7 @@ class MidStore extends ChangeNotifier {
     required int requiredBudget,
     required int investment,
     required int expense,
-    required Sector sector,
+    required ProjectSector sector,
     List<String> assigneeIds = const [],
   }) async {
     final data = await api.post('/projects', body: {
@@ -397,7 +405,8 @@ class MidStore extends ChangeNotifier {
     }) as Map<String, dynamic>;
     final p = projectFromJson(data);
     projects.insert(0, p);
-    notifyListeners();
+    // Rahbarlarga yuklangan topshiriqlarni yangilash
+    await refreshAll();
     return p;
   }
 
@@ -409,7 +418,7 @@ class MidStore extends ChangeNotifier {
     required int requiredBudget,
     required int investment,
     required int expense,
-    required Sector sector,
+    required ProjectSector sector,
   }) async {
     final data = await api.patch('/projects/$projectId', body: {
       'name': name,
@@ -422,11 +431,7 @@ class MidStore extends ChangeNotifier {
     }) as Map<String, dynamic>;
     final updated = projectFromJson(data);
     final idx = projects.indexWhere((e) => e.id == projectId);
-    if (idx >= 0) {
-      updated.assigneeIds = projects[idx].assigneeIds;
-      updated.parts = projects[idx].parts;
-      projects[idx] = updated;
-    }
+    if (idx >= 0) projects[idx] = updated;
     notifyListeners();
   }
 
@@ -436,11 +441,7 @@ class MidStore extends ChangeNotifier {
     }) as Map<String, dynamic>;
     final updated = projectFromJson(data);
     final idx = projects.indexWhere((e) => e.id == projectId);
-    if (idx >= 0) {
-      updated.assigneeIds = projects[idx].assigneeIds;
-      updated.parts = projects[idx].parts;
-      projects[idx] = updated;
-    }
+    if (idx >= 0) projects[idx] = updated;
     notifyListeners();
   }
 
@@ -455,10 +456,13 @@ class MidStore extends ChangeNotifier {
     required String projectId,
     required String partName,
     required String employeeId,
+    String? position,
   }) async {
     final data = await api.put('/projects/$projectId/parts', body: {
       'part_name': partName,
       'employee_id': employeeId,
+      if (position != null && position.trim().isNotEmpty)
+        'position': position.trim(),
     }) as Map<String, dynamic>;
     final updated = projectFromJson(data);
     final idx = projects.indexWhere((e) => e.id == projectId);
@@ -600,23 +604,7 @@ class MidStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Kampaniya pulini qo'lda belgilash (cheksiz ochilish balansi).
-  void setCompanyCash(int amount) {
-    companyCash = amount < 0 ? 0 : amount;
-    notifyListeners();
-  }
-
-  void setReserveCash(int amount) {
-    reserveCash = amount < 0 ? 0 : amount;
-    notifyListeners();
-  }
-
-  void resetFinanceBalances() {
-    companyCash = 0;
-    reserveCash = 0;
-    finances.clear();
-    notifyListeners();
-  }
+  // Kampaniya puli faqat cheklar (kirim/chiqim) orqali o'zgaradi.
 
   int get totalKirim => finances
       .where((f) => f.type == FinanceType.kirim)
@@ -690,6 +678,71 @@ class MidStore extends ChangeNotifier {
     if (idx >= 0) departments[idx] = updated;
     notifyListeners();
   }
+
+  /// Katalogdan mavjud xodimni bo'limga biriktirish.
+  Future<void> assignStaffToDepartment({
+    required String departmentId,
+    required String userId,
+    required String position,
+    bool makeHead = false,
+  }) async {
+    final data = await api.post('/departments/$departmentId/staff', body: {
+      'user_id': userId,
+      'position': position,
+      'make_head': makeHead,
+    }) as Map<String, dynamic>;
+    final updated = departmentFromJson(data);
+    final idx = departments.indexWhere((e) => e.id == departmentId);
+    if (idx >= 0) departments[idx] = updated;
+    final u = userById(userId);
+    if (u != null) {
+      u.departmentId = departmentId;
+      u.position = position;
+      final dept = departments.firstWhere((d) => d.id == departmentId);
+      u.sector = dept.sector;
+    }
+    notifyListeners();
+  }
+
+  // --- Job titles (lavozimlar) ---
+  Future<JobTitleItem> addJobTitle(String name) async {
+    final data = await api.post('/positions', body: {
+      'name': name.trim(),
+    }) as Map<String, dynamic>;
+    final t = jobTitleFromJson(data);
+    jobTitles.add(t);
+    jobTitles.sort((a, b) => a.name.compareTo(b.name));
+    notifyListeners();
+    return t;
+  }
+
+  Future<void> updateJobTitle(String id, {String? name, bool? active}) async {
+    final data = await api.patch('/positions/$id', body: {
+      if (name != null) 'name': name.trim(),
+      if (active != null) 'active': active,
+    }) as Map<String, dynamic>;
+    final updated = jobTitleFromJson(data);
+    final idx = jobTitles.indexWhere((e) => e.id == id);
+    if (updated.active) {
+      if (idx >= 0) {
+        jobTitles[idx] = updated;
+      } else {
+        jobTitles.add(updated);
+      }
+    } else if (idx >= 0) {
+      jobTitles.removeAt(idx);
+    }
+    notifyListeners();
+  }
+
+  Future<void> deleteJobTitle(String id) async {
+    await api.delete('/positions/$id');
+    jobTitles.removeWhere((e) => e.id == id);
+    notifyListeners();
+  }
+
+  List<String> get jobTitleNames =>
+      jobTitles.map((e) => e.name).toList()..sort();
 
   Future<void> deleteDepartment(String id) async {
     await api.delete('/departments/$id');

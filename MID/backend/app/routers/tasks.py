@@ -28,6 +28,24 @@ def create_task(
     actor: User = Depends(require_leadership),
     db: Session = Depends(get_db),
 ) -> Task:
+    assignee = db.get(User, body.assignee_id)
+    if assignee is None or not assignee.active:
+        raise HTTPException(400, "Mas'ul topilmadi")
+
+    # Direktor → faqat rahbarlarga; Rahbar → o'z sektoridagi xodimlarga
+    if actor.role == "direktor":
+        if assignee.role != "rahbar":
+            raise HTTPException(
+                400, "Direktor topshiriqni faqat Rahbarlarga yuklaydi"
+            )
+    elif actor.role == "rahbar":
+        if assignee.role != "xodim":
+            raise HTTPException(
+                400, "Rahbar topshiriqni faqat xodimlarga yuklaydi"
+            )
+        if actor.sector and assignee.sector and actor.sector != assignee.sector:
+            raise HTTPException(400, "Faqat o'z sektoridagi xodimga yuklash mumkin")
+
     task = Task(
         id=next_id(db, "t"),
         title=body.title.strip(),

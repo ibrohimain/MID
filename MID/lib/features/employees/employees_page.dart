@@ -30,8 +30,7 @@ class _EmployeesPageState extends State<EmployeesPage> {
   Widget build(BuildContext context) {
     final store = widget.store;
     final canManage = widget.user.role.canManageStaff;
-    final positions = store.departments.expand((d) => d.positions).toSet().toList()
-      ..sort();
+    final positions = store.jobTitleNames;
 
     final list = store.employees.where((e) {
       if (e.role == UserRole.direktor) return true;
@@ -198,10 +197,7 @@ class _EmployeesPageState extends State<EmployeesPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
-          final dept = widget.store.departments
-              .where((d) => d.id == deptId)
-              .firstOrNull;
-          final positions = dept?.positions ?? <String>[];
+          final positions = widget.store.jobTitleNames;
           return AlertDialog(
             title: const Text('Xodimni tahrirlash'),
             content: SizedBox(
@@ -241,22 +237,22 @@ class _EmployeesPageState extends State<EmployeesPage> {
                             ),
                           )
                           .toList(),
-                      onChanged: (v) => setLocal(() {
-                        deptId = v;
-                        position = null;
-                      }),
+                      onChanged: (v) => setLocal(() => deptId = v),
                       decoration: const InputDecoration(labelText: "Bo'lim"),
                     ),
                     DropdownButtonFormField<String>(
                       value: position != null && positions.contains(position)
                           ? position
-                          : null,
+                          : (positions.isNotEmpty ? positions.first : null),
                       items: positions
                           .map((p) =>
                               DropdownMenuItem(value: p, child: Text(p)))
                           .toList(),
                       onChanged: (v) => setLocal(() => position = v),
-                      decoration: const InputDecoration(labelText: 'Lavozim'),
+                      decoration: const InputDecoration(
+                        labelText: 'Lavozim',
+                        helperText: 'Lavozimlar sahifasidan',
+                      ),
                     ),
                     TextField(
                       controller: salary,
@@ -338,10 +334,7 @@ class _EmployeesPageState extends State<EmployeesPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
-          final dept = widget.store.departments
-              .where((d) => d.id == deptId)
-              .firstOrNull;
-          final positions = dept?.positions ?? <String>[];
+          final positions = widget.store.jobTitleNames;
           return AlertDialog(
             title: const Text("Yangi xodim + login/parol"),
             content: SizedBox(
@@ -397,20 +390,22 @@ class _EmployeesPageState extends State<EmployeesPage> {
                             ),
                           )
                           .toList(),
-                      onChanged: (v) => setLocal(() {
-                        deptId = v;
-                        position = null;
-                      }),
+                      onChanged: (v) => setLocal(() => deptId = v),
                       decoration: const InputDecoration(labelText: "Bo'lim"),
                     ),
                     DropdownButtonFormField<String>(
-                      value: position,
+                      value: position != null && positions.contains(position)
+                          ? position
+                          : (positions.isNotEmpty ? positions.first : null),
                       items: positions
                           .map((p) =>
                               DropdownMenuItem(value: p, child: Text(p)))
                           .toList(),
                       onChanged: (v) => setLocal(() => position = v),
-                      decoration: const InputDecoration(labelText: 'Lavozim'),
+                      decoration: const InputDecoration(
+                        labelText: 'Lavozim',
+                        helperText: 'Lavozimlar sahifasidan',
+                      ),
                     ),
                     TextField(
                       controller: salary,

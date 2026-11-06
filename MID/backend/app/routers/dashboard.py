@@ -9,6 +9,7 @@ from app.models import (
     AttendanceRecord,
     Department,
     FinanceRecord,
+    JobTitle,
     Project,
     ProjectUpdate,
     StudyGroup,
@@ -100,6 +101,11 @@ def bootstrap(
         ).all()
     )
     departments = list(db.scalars(select(Department)).all())
+    job_titles = list(
+        db.scalars(
+            select(JobTitle).where(JobTitle.active.is_(True)).order_by(JobTitle.name)
+        ).all()
+    )
     groups = list(db.scalars(select(StudyGroup)).all())
     attendance = list(
         db.scalars(
@@ -143,6 +149,7 @@ def bootstrap(
         project_updates=updates,
         finances=finances,
         departments=departments,
+        job_titles=job_titles,
         groups=groups,
         attendance=attendance,
         materials=materials,

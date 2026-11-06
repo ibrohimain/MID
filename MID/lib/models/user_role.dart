@@ -15,6 +15,23 @@ extension SectorX on Sector {
   String get short => this == Sector.a ? 'A' : 'B';
 }
 
+/// Loyiha jamoasi: A, B yoki ikkala rahbar/jamoa.
+enum ProjectSector { a, b, both }
+
+extension ProjectSectorX on ProjectSector {
+  String get label => switch (this) {
+        ProjectSector.a => 'A sektor',
+        ProjectSector.b => 'B sektor',
+        ProjectSector.both => 'Ikkala jamoa',
+      };
+
+  String get short => switch (this) {
+        ProjectSector.a => 'A',
+        ProjectSector.b => 'B',
+        ProjectSector.both => 'A+B',
+      };
+}
+
 extension UserRoleX on UserRole {
   String get label => switch (this) {
         UserRole.direktor => 'Direktor',

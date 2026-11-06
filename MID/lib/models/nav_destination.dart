@@ -11,6 +11,7 @@ enum MidPage {
   employees,
   students,
   departments,
+  positions,
   announcements,
   profile,
 }
@@ -24,6 +25,7 @@ extension MidPageX on MidPage {
         MidPage.employees => 'Xodimlar',
         MidPage.students => "O'quvchilar",
         MidPage.departments => "Bo'limlar",
+        MidPage.positions => 'Lavozimlar',
         MidPage.announcements => "E'lonlar",
         MidPage.profile => 'Profil',
       };
@@ -36,6 +38,7 @@ extension MidPageX on MidPage {
         MidPage.employees => Icons.groups_outlined,
         MidPage.students => Icons.menu_book_outlined,
         MidPage.departments => Icons.apartment_outlined,
+        MidPage.positions => Icons.work_outline,
         MidPage.announcements => Icons.campaign_outlined,
         MidPage.profile => Icons.manage_accounts_outlined,
       };
@@ -52,6 +55,7 @@ abstract final class RolePermissions {
           MidPage.employees,
           MidPage.students,
           MidPage.departments,
+          MidPage.positions,
           MidPage.announcements,
         ],
       UserRole.rahbar => const [

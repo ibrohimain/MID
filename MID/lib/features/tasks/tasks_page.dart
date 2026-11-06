@@ -22,6 +22,23 @@ class TasksPage extends StatefulWidget {
 class _TasksPageState extends State<TasksPage> {
   String _query = '';
 
+  /// Direktor → rahbarlar; Rahbar → o'z sektoridagi xodimlar.
+  List<AppUser> get _assignees {
+    final store = widget.store;
+    final me = widget.user;
+    if (me.role == UserRole.direktor) {
+      return store.users
+          .where((u) => u.active && u.role == UserRole.rahbar)
+          .toList();
+    }
+    if (me.role == UserRole.rahbar) {
+      return store.staffOnly
+          .where((u) => me.sector == null || u.sector == me.sector)
+          .toList();
+    }
+    return store.staffOnly;
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
@@ -30,13 +47,19 @@ class _TasksPageState extends State<TasksPage> {
         ? store.tasks
         : store.tasks.where((t) => t.assigneeId == widget.user.id).toList();
 
-    final catalog = store.staffOnly.where((e) {
+    final catalog = _assignees.where((e) {
       final q = _query.toLowerCase();
       return q.isEmpty ||
           e.fullName.toLowerCase().contains(q) ||
           (e.position ?? '').toLowerCase().contains(q) ||
           (e.sector?.label.toLowerCase().contains(q) ?? false);
     }).toList();
+
+    final subtitle = switch (widget.user.role) {
+      UserRole.direktor => 'Direktor faqat rahbarlarga topshiriq yuklaydi',
+      UserRole.rahbar => 'Rahbar o‘z xodimlariga to‘g‘ridan-to‘g‘ri ish beradi',
+      _ => 'Sizga biriktirilgan vazifalar',
+    };
 
     return PageScaffold(
       child: Column(
@@ -45,9 +68,7 @@ class _TasksPageState extends State<TasksPage> {
         children: [
           SectionHeader(
             title: 'Topshiriqlar',
-            subtitle: canManage
-                ? 'Yuklash, tahrirlash va o‘chirish'
-                : 'Sizga biriktirilgan vazifalar',
+            subtitle: subtitle,
             action: canManage
                 ? FilledButton.icon(
                     onPressed: () => _openEditor(context),
@@ -59,9 +80,11 @@ class _TasksPageState extends State<TasksPage> {
           if (canManage) ...[
             const SizedBox(height: 16),
             TextField(
-              decoration: const InputDecoration(
-                hintText: 'Xodim qidirish...',
-                prefixIcon: Icon(Icons.search),
+              decoration: InputDecoration(
+                hintText: widget.user.role == UserRole.direktor
+                    ? 'Rahbar qidirish...'
+                    : 'Xodim qidirish...',
+                prefixIcon: const Icon(Icons.search),
               ),
               onChanged: (v) => setState(() => _query = v),
             ),
@@ -72,7 +95,9 @@ class _TasksPageState extends State<TasksPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Xodimlar katalogi',
+                    widget.user.role == UserRole.direktor
+                        ? 'Rahbarlar'
+                        : 'Xodimlar katalogi',
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
@@ -85,8 +110,10 @@ class _TasksPageState extends State<TasksPage> {
                       contentPadding: EdgeInsets.zero,
                       title: Text(e.fullName),
                       subtitle: Text(
-                        '${e.position ?? ''} · ${e.sector?.label ?? ''} · '
-                        '${loaded ? 'Ish yuklangan' : 'Bo‘sh'}',
+                        '${e.role.label}'
+                        '${e.position != null ? ' · ${e.position}' : ''}'
+                        '${e.sector != null ? ' · ${e.sector!.label}' : ''}'
+                        ' · ${loaded ? 'Ish yuklangan' : 'Bo‘sh'}',
                       ),
                       trailing: TextButton(
                         onPressed: () => _openEditor(context, preselect: e),
@@ -152,7 +179,8 @@ class _TasksPageState extends State<TasksPage> {
                     Text(task.description),
                     const SizedBox(height: 6),
                     Text(
-                      'Mas’ul: ${assignee?.fullName ?? task.assigneeId}',
+                      'Mas’ul: ${assignee?.fullName ?? task.assigneeId}'
+                      '${assignee != null ? ' · ${assignee.role.label}' : ''}',
                       style: const TextStyle(color: MidColors.navyMuted),
                     ),
                     if (!widget.user.role.isLeadership &&
@@ -211,11 +239,17 @@ class _TasksPageState extends State<TasksPage> {
   }) async {
     final title = TextEditingController(text: existing?.title ?? '');
     final desc = TextEditingController(text: existing?.description ?? '');
+    final pool = _assignees;
     AppUser? selected = existing != null
         ? widget.store.userById(existing.assigneeId)
-        : (preselect ?? widget.store.staffOnly.firstOrNull);
+        : (preselect ?? pool.firstOrNull);
+    if (selected != null && !pool.any((u) => u.id == selected!.id)) {
+      selected = pool.firstOrNull;
+    }
     var priority = existing?.priority ?? TaskPriority.orta;
     var status = existing?.status ?? TaskStatus.yangi;
+    final assigneeLabel =
+        widget.user.role == UserRole.direktor ? 'Rahbar' : 'Xodim';
 
     final ok = await showDialog<bool>(
       context: context,
@@ -224,7 +258,7 @@ class _TasksPageState extends State<TasksPage> {
           builder: (ctx, setLocal) {
             return AlertDialog(
               title: Text(existing == null
-                  ? 'Xodimga ish yuklash'
+                  ? '${assigneeLabel}ga ish yuklash'
                   : 'Topshiriqni tahrirlash'),
               content: SizedBox(
                 width: 420,
@@ -233,17 +267,24 @@ class _TasksPageState extends State<TasksPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DropdownButtonFormField<AppUser>(
-                        value: selected,
-                        items: widget.store.staffOnly
+                        value: selected != null &&
+                                pool.any((u) => u.id == selected!.id)
+                            ? selected
+                            : pool.firstOrNull,
+                        items: pool
                             .map(
                               (e) => DropdownMenuItem(
                                 value: e,
-                                child: Text('${e.fullName} · ${e.position}'),
+                                child: Text(
+                                  '${e.fullName}'
+                                  '${e.position != null ? ' · ${e.position}' : ''}'
+                                  '${e.sector != null ? ' · ${e.sector!.short}' : ''}',
+                                ),
                               ),
                             )
                             .toList(),
                         onChanged: (v) => setLocal(() => selected = v),
-                        decoration: const InputDecoration(labelText: 'Xodim'),
+                        decoration: InputDecoration(labelText: assigneeLabel),
                       ),
                       const SizedBox(height: 10),
                       TextField(

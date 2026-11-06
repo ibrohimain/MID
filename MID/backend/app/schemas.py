@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class OrmModel(BaseModel):
@@ -136,9 +136,20 @@ class ProjectOut(OrmModel):
     required_budget: int
     investment: int
     expense: int
-    sector: str
+    sector: str  # a | b | both
     assignee_ids: list[str] = []
     parts: dict[str, str] = {}
+    member_positions: dict[str, str] = {}
+
+    @field_validator("assignee_ids", mode="before")
+    @classmethod
+    def _assignees(cls, v):  # noqa: N805
+        return v or []
+
+    @field_validator("parts", "member_positions", mode="before")
+    @classmethod
+    def _maps(cls, v):  # noqa: N805
+        return v or {}
 
 
 class ProjectCreate(BaseModel):
@@ -148,7 +159,7 @@ class ProjectCreate(BaseModel):
     required_budget: int = 0
     investment: int = 0
     expense: int = 0
-    sector: str
+    sector: str  # a | b | both
     assignee_ids: list[str] = []
 
 
@@ -169,6 +180,28 @@ class ProjectStageUpdate(BaseModel):
 class ProjectPartAssign(BaseModel):
     part_name: str
     employee_id: str
+    position: str | None = None
+
+
+class JobTitleOut(OrmModel):
+    id: str
+    name: str
+    active: bool = True
+
+
+class JobTitleCreate(BaseModel):
+    name: str
+
+
+class JobTitleUpdate(BaseModel):
+    name: str | None = None
+    active: bool | None = None
+
+
+class DepartmentStaffAssign(BaseModel):
+    user_id: str
+    position: str
+    make_head: bool = False
 
 
 class ProjectUpdateOut(OrmModel):
@@ -348,6 +381,7 @@ class BootstrapData(BaseModel):
     project_updates: list[ProjectUpdateOut]
     finances: list[FinanceOut]
     departments: list[DepartmentOut]
+    job_titles: list[JobTitleOut] = []
     groups: list[GroupOut]
     attendance: list[AttendanceOut]
     materials: list[MaterialOut]
