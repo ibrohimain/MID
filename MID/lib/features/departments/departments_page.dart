@@ -328,7 +328,8 @@ class DepartmentsPage extends StatelessWidget {
     if (ok != true || name.text.trim().isEmpty || login.text.trim().isEmpty) {
       return;
     }
-    if (store.loginTaken(login.text)) {
+    final taken = await store.loginTaken(login.text);
+    if (taken) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Bu login band')),
@@ -349,26 +350,28 @@ class DepartmentsPage extends StatelessWidget {
       return;
     }
 
-    if (useCustomPosition || d.positions.isEmpty) {
-      if (!d.positions.contains(pos)) {
-        store.setDepartmentPositions(d.id, [...d.positions, pos]);
+    await safeMutate(context, () async {
+      if (useCustomPosition || d.positions.isEmpty) {
+        if (!d.positions.contains(pos)) {
+          await store.setDepartmentPositions(d.id, [...d.positions, pos]);
+        }
       }
-    }
 
-    final created = store.addUser(
-      fullName: name.text.trim(),
-      login: login.text.trim(),
-      password: password.text.trim(),
-      role: UserRole.xodim,
-      sector: d.sector,
-      departmentId: d.id,
-      position: pos,
-      salary: int.tryParse(salary.text) ?? 0,
-    );
+      final created = await store.addUser(
+        fullName: name.text.trim(),
+        login: login.text.trim(),
+        password: password.text.trim(),
+        role: UserRole.xodim,
+        sector: d.sector,
+        departmentId: d.id,
+        position: pos,
+        salary: int.tryParse(salary.text) ?? 0,
+      );
 
-    if (makeHead) {
-      store.assignDepartmentHead(d.id, created.id);
-    }
+      if (makeHead) {
+        await store.assignDepartmentHead(d.id, created.id);
+      }
+    });
   }
 
   Future<void> _assignHead(BuildContext context, DepartmentItem d) async {
