@@ -469,6 +469,24 @@ class MidStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Kampaniya pulini qo'lda belgilash (cheksiz ochilish balansi).
+  void setCompanyCash(int amount) {
+    companyCash = amount < 0 ? 0 : amount;
+    notifyListeners();
+  }
+
+  void setReserveCash(int amount) {
+    reserveCash = amount < 0 ? 0 : amount;
+    notifyListeners();
+  }
+
+  void resetFinanceBalances() {
+    companyCash = 0;
+    reserveCash = 0;
+    finances.clear();
+    notifyListeners();
+  }
+
   int get totalKirim => finances
       .where((f) => f.type == FinanceType.kirim)
       .fold(0, (s, f) => s + f.amount);
@@ -890,49 +908,10 @@ class MidStore extends ChangeNotifier {
       ),
     ]);
 
-    companyCash = 420000000;
-    reserveCash = 80000000;
-
-    finances.addAll([
-      FinanceRecord(
-        id: 'f-1',
-        title: 'Investitsiya — EduLink',
-        amount: 120000000,
-        type: FinanceType.kirim,
-        receiptNo: 'CHK-2026-1',
-        projectId: 'p-1',
-      ),
-      FinanceRecord(
-        id: 'f-2',
-        title: 'Ofis ijarasi',
-        amount: 25000000,
-        type: FinanceType.chiqim,
-        receiptNo: 'CHK-2026-2',
-      ),
-      FinanceRecord(
-        id: 'f-3',
-        title: 'Maosh — Jasur Aliyev',
-        amount: 9000000,
-        type: FinanceType.maosh,
-        receiptNo: 'CHK-2026-3',
-        relatedUserId: jasur.id,
-      ),
-      FinanceRecord(
-        id: 'f-4',
-        title: 'Zaxira fondiga ajratish',
-        amount: 80000000,
-        type: FinanceType.zaxira,
-        receiptNo: 'CHK-2026-4',
-        note: 'Yillik zaxira',
-      ),
-      FinanceRecord(
-        id: 'f-5',
-        title: 'Marketing budjeti',
-        amount: 15000000,
-        type: FinanceType.ajratma,
-        receiptNo: 'CHK-2026-5',
-      ),
-    ]);
+      // Moliya 0 dan boshlanadi — foydalanuvchi o'zi kiritadi.
+    companyCash = 0;
+    reserveCash = 0;
+    finances.clear();
 
     attendance.addAll([
       AttendanceRecord(

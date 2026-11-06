@@ -28,16 +28,61 @@ class FinancePage extends StatelessWidget {
         children: [
           SectionHeader(
             title: 'Moliya',
-            subtitle: 'Kirim, chiqim, maosh, ajratma va zaxira — cheklar bilan',
+            subtitle:
+                'Kampaniya pulini qo‘lda belgilang, keyin cheklar bilan yuriting',
             action: canEdit
-                ? FilledButton.icon(
-                    onPressed: () => _addReceipt(context),
-                    icon: const Icon(Icons.receipt_long),
-                    label: const Text('Chek yozish'),
+                ? Wrap(
+                    spacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _setCompanyCash(context),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Pul belgilash'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () => _addReceipt(context),
+                        icon: const Icon(Icons.receipt_long),
+                        label: const Text('Chek yozish'),
+                      ),
+                    ],
                   )
                 : null,
           ),
           const SizedBox(height: 16),
+          if (canEdit)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: SurfaceBox(
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_balance, color: MidColors.teal),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Kampaniya puli (qo‘lda)',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            moneySum(store.companyCash),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton(
+                      onPressed: () => _setCompanyCash(context),
+                      child: const Text('O‘zgartirish'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           LayoutBuilder(
             builder: (context, c) {
               final cols = c.maxWidth > 900
@@ -214,6 +259,58 @@ class FinancePage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _setCompanyCash(BuildContext context) async {
+    final ctrl = TextEditingController(text: '${store.companyCash}');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Kampaniya pulini belgilash'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Bu yerga mavjud balansni o‘zingiz yozing. Keyin cheklar shu summadan hisoblanadi.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Summa (so‘m)',
+                  hintText: '0',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => ctrl.text = '0',
+                child: const Text('0 qilish'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Bekor'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Saqlash'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await safeMutate(
+        context,
+        () => store.setCompanyCash(int.tryParse(ctrl.text.trim()) ?? 0),
+      );
+    }
   }
 
   Future<void> _deleteReceipt(BuildContext context, FinanceRecord f) async {

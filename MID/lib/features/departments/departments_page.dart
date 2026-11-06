@@ -37,7 +37,7 @@ class DepartmentsPage extends StatelessWidget {
           SectionHeader(
             title: "Bo'limlar va tuzilma",
             subtitle:
-                'Yangi bo‘lim, tahrirlash, o‘chirish va ichida rahbar/xodim tayinlash',
+                "Bo'lim boshlig'i, lavozim va xodim qo'shish — bitta joyda",
             action: canEdit
                 ? FilledButton.icon(
                     onPressed: () => _editDepartment(context),
@@ -99,6 +99,9 @@ class DepartmentsPage extends StatelessWidget {
             const SizedBox(height: 8),
             ...store.departments.where((d) => d.sector == sector).map((d) {
               final head = store.userById(d.headId);
+              final staff = store.staffOnly
+                  .where((e) => e.departmentId == d.id)
+                  .toList();
               return Padding(
                 key: ValueKey(d.id),
                 padding: const EdgeInsets.only(bottom: 10),
@@ -123,29 +126,74 @@ class DepartmentsPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Bo‘lim rahbari: ${head?.fullName ?? '-'}'
-                        '${head != null ? ' (${head.role.label})' : ''}',
+                        "Bo'lim boshlig'i: ${head?.fullName ?? '-'}"
+                        '${head != null ? ' · ${head.position ?? head.role.label}' : ''}',
                       ),
                       const SizedBox(height: 8),
+                      Text(
+                        'Lavozimlar',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: d.positions
-                            .map(
-                              (p) => TagChip(text: p, color: MidColors.teal),
-                            )
-                            .toList(),
+                        children: d.positions.isEmpty
+                            ? [
+                                const Text(
+                                  "Lavozim yo'q",
+                                  style: TextStyle(color: MidColors.navyMuted),
+                                ),
+                              ]
+                            : d.positions
+                                .map(
+                                  (p) =>
+                                      TagChip(text: p, color: MidColors.teal),
+                                )
+                                .toList(),
                       ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "Bo'lim xodimlari",
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      if (staff.isEmpty)
+                        const Text(
+                          "Hali xodim qo'shilmagan",
+                          style: TextStyle(color: MidColors.navyMuted),
+                        )
+                      else
+                        ...staff.map(
+                          (e) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              '• ${e.fullName} — ${e.position ?? 'Lavozimsiz'}'
+                              '${e.id == d.headId ? " (boshliq)" : ''}',
+                            ),
+                          ),
+                        ),
                       if (canEdit) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
+                          runSpacing: 8,
                           children: [
+                            FilledButton.icon(
+                              onPressed: () => _addEmployeeToDept(context, d),
+                              icon: const Icon(Icons.person_add_alt, size: 18),
+                              label: const Text("Xodim qo'shish"),
+                            ),
                             TextButton.icon(
-                              onPressed: () =>
-                                  _assignHead(context, d),
+                              onPressed: () => _assignHead(context, d),
                               icon: const Icon(Icons.badge_outlined, size: 18),
-                              label: const Text('Rahbar/xodim tayinlash'),
+                              label: const Text("Boshliq tayinlash"),
                             ),
                             TextButton.icon(
                               onPressed: () =>
@@ -175,6 +223,152 @@ class DepartmentsPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _addEmployeeToDept(
+    BuildContext context,
+    DepartmentItem d,
+  ) async {
+    final name = TextEditingController();
+    final login = TextEditingController();
+    final password = TextEditingController(text: '1234');
+    final salary = TextEditingController(text: '7000000');
+    final customPosition = TextEditingController();
+    String? position =
+        d.positions.isNotEmpty ? d.positions.first : null;
+    var makeHead = false;
+    var useCustomPosition = d.positions.isEmpty;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text("${d.name} — xodim qo'shish"),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    "Bo'lim: ${d.name} · ${d.sector.label}",
+                    style: const TextStyle(color: MidColors.navyMuted),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: name,
+                    decoration: const InputDecoration(labelText: 'F.I.Sh'),
+                  ),
+                  TextField(
+                    controller: login,
+                    decoration: const InputDecoration(labelText: 'Login'),
+                  ),
+                  TextField(
+                    controller: password,
+                    decoration: const InputDecoration(labelText: 'Parol'),
+                  ),
+                  if (d.positions.isNotEmpty && !useCustomPosition)
+                    DropdownButtonFormField<String>(
+                      value: position,
+                      items: d.positions
+                          .map(
+                            (p) => DropdownMenuItem(value: p, child: Text(p)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setLocal(() => position = v),
+                      decoration: const InputDecoration(labelText: 'Lavozim'),
+                    ),
+                  if (useCustomPosition || d.positions.isEmpty)
+                    TextField(
+                      controller: customPosition,
+                      decoration: const InputDecoration(
+                        labelText: 'Yangi lavozim nomi',
+                      ),
+                    ),
+                  if (d.positions.isNotEmpty)
+                    TextButton(
+                      onPressed: () => setLocal(
+                        () => useCustomPosition = !useCustomPosition,
+                      ),
+                      child: Text(
+                        useCustomPosition
+                            ? "Mavjud lavozimdan tanlash"
+                            : "Yangi lavozim yozish",
+                      ),
+                    ),
+                  TextField(
+                    controller: salary,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Maosh'),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Bo'lim boshlig'i qilib belgilash"),
+                    value: makeHead,
+                    onChanged: (v) => setLocal(() => makeHead = v ?? false),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Bekor'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text("Qo'shish"),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok != true || name.text.trim().isEmpty || login.text.trim().isEmpty) {
+      return;
+    }
+    if (store.loginTaken(login.text)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bu login band')),
+        );
+      }
+      return;
+    }
+
+    final pos = useCustomPosition || d.positions.isEmpty
+        ? customPosition.text.trim()
+        : (position ?? '');
+    if (pos.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lavozimni yozing')),
+        );
+      }
+      return;
+    }
+
+    if (useCustomPosition || d.positions.isEmpty) {
+      if (!d.positions.contains(pos)) {
+        store.setDepartmentPositions(d.id, [...d.positions, pos]);
+      }
+    }
+
+    final created = store.addUser(
+      fullName: name.text.trim(),
+      login: login.text.trim(),
+      password: password.text.trim(),
+      role: UserRole.xodim,
+      sector: d.sector,
+      departmentId: d.id,
+      position: pos,
+      salary: int.tryParse(salary.text) ?? 0,
+    );
+
+    if (makeHead) {
+      store.assignDepartmentHead(d.id, created.id);
+    }
   }
 
   Future<void> _assignHead(BuildContext context, DepartmentItem d) async {
