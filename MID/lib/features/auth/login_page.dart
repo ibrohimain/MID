@@ -25,9 +25,9 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _submit() {
-    final ok = widget.auth.signIn(_login.text, _password.text);
-    if (!ok) setState(() {});
+  Future<void> _submit() async {
+    final ok = await widget.auth.signIn(_login.text, _password.text);
+    if (!ok && mounted) setState(() {});
   }
 
   @override
@@ -115,8 +115,17 @@ class _LoginPageState extends State<LoginPage> {
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              onPressed: _submit,
-                              child: const Text('Kirish'),
+                              onPressed: widget.auth.busy ? null : _submit,
+                              child: widget.auth.busy
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text('Kirish'),
                             ),
                           ),
                           const SizedBox(height: 18),

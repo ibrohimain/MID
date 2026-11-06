@@ -413,7 +413,10 @@ class DepartmentsPage extends StatelessWidget {
       ),
     );
     if (ok == true && selected != null) {
-      store.assignDepartmentHead(d.id, selected!.id);
+      await safeMutate(
+        context,
+        () => store.assignDepartmentHead(d.id, selected!.id),
+      );
     }
   }
 
@@ -520,22 +523,24 @@ class DepartmentsPage extends StatelessWidget {
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toList();
-      if (existing == null) {
-        store.addDepartment(
-          name: name.text.trim(),
-          sector: sector,
-          headId: head!.id,
-          positions: pos,
-        );
-      } else {
-        store.updateDepartment(
-          id: existing.id,
-          name: name.text.trim(),
-          sector: sector,
-          headId: head!.id,
-          positions: pos,
-        );
-      }
+      await safeMutate(context, () async {
+        if (existing == null) {
+          await store.addDepartment(
+            name: name.text.trim(),
+            sector: sector,
+            headId: head!.id,
+            positions: pos,
+          );
+        } else {
+          await store.updateDepartment(
+            id: existing.id,
+            name: name.text.trim(),
+            sector: sector,
+            headId: head!.id,
+            positions: pos,
+          );
+        }
+      });
     }
   }
 }

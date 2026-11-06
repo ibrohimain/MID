@@ -1,0 +1,32 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-change-me-mid-prod-secret-key-2026}
+      DATABASE_URL: sqlite:////data/mid.db
+      CORS_ORIGINS: "*"
+    volumes:
+      - mid_data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "${MID_HTTP_PORT:-8100}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mid_data:

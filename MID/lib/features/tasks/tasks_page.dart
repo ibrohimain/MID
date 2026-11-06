@@ -162,16 +162,22 @@ class _TasksPageState extends State<TasksPage> {
                         spacing: 8,
                         children: [
                           OutlinedButton(
-                            onPressed: () => store.setTaskStatus(
-                              task.id,
-                              TaskStatus.javobBerildi,
+                            onPressed: () => safeMutate(
+                              context,
+                              () => store.setTaskStatus(
+                                task.id,
+                                TaskStatus.javobBerildi,
+                              ),
                             ),
                             child: const Text('Javob berish'),
                           ),
                           OutlinedButton(
-                            onPressed: () => store.setTaskStatus(
-                              task.id,
-                              TaskStatus.bajarildi,
+                            onPressed: () => safeMutate(
+                              context,
+                              () => store.setTaskStatus(
+                                task.id,
+                                TaskStatus.bajarildi,
+                              ),
                             ),
                             child: const Text('Bajarildi'),
                           ),
@@ -306,25 +312,27 @@ class _TasksPageState extends State<TasksPage> {
     );
 
     if (ok == true && selected != null && title.text.trim().isNotEmpty) {
-      if (existing == null) {
-        widget.store.assignTask(
-          title: title.text.trim(),
-          description: desc.text.trim(),
-          assigneeId: selected!.id,
-          createdById: widget.user.id,
-          priority: priority,
-        );
-      } else {
-        widget.store.updateTask(
-          taskId: existing.id,
-          title: title.text.trim(),
-          description: desc.text.trim(),
-          assigneeId: selected!.id,
-          priority: priority,
-          status: status,
-          projectId: existing.projectId,
-        );
-      }
+      await safeMutate(context, () async {
+        if (existing == null) {
+          await widget.store.assignTask(
+            title: title.text.trim(),
+            description: desc.text.trim(),
+            assigneeId: selected!.id,
+            createdById: widget.user.id,
+            priority: priority,
+          );
+        } else {
+          await widget.store.updateTask(
+            taskId: existing.id,
+            title: title.text.trim(),
+            description: desc.text.trim(),
+            assigneeId: selected!.id,
+            priority: priority,
+            status: status,
+            projectId: existing.projectId,
+          );
+        }
+      });
     }
   }
 }

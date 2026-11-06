@@ -225,7 +225,9 @@ class ProjectsPage extends StatelessWidget {
         ),
       ),
     );
-    if (ok == true) store.setProjectStage(p.id, stage);
+    if (ok == true) {
+      await safeMutate(context, () => store.setProjectStage(p.id, stage));
+    }
   }
 
   Future<void> _addUpdate(BuildContext context, String projectId) async {
@@ -265,11 +267,14 @@ class ProjectsPage extends StatelessWidget {
       ),
     );
     if (ok == true && title.text.trim().isNotEmpty) {
-      store.addProjectUpdate(
-        projectId: projectId,
-        authorId: user.id,
-        title: title.text.trim(),
-        body: body.text.trim(),
+      await safeMutate(
+        context,
+        () => store.addProjectUpdate(
+          projectId: projectId,
+          authorId: user.id,
+          title: title.text.trim(),
+          body: body.text.trim(),
+        ),
       );
     }
   }
@@ -379,28 +384,30 @@ class ProjectsPage extends StatelessWidget {
     );
 
     if (ok == true && name.text.trim().isNotEmpty) {
-      if (existing == null) {
-        store.addProject(
-          name: name.text.trim(),
-          description: desc.text.trim(),
-          stage: stage,
-          requiredBudget: int.tryParse(required.text) ?? 0,
-          investment: int.tryParse(invest.text) ?? 0,
-          expense: int.tryParse(expense.text) ?? 0,
-          sector: sector,
-        );
-      } else {
-        store.updateProject(
-          projectId: existing.id,
-          name: name.text.trim(),
-          description: desc.text.trim(),
-          stage: stage,
-          requiredBudget: int.tryParse(required.text) ?? 0,
-          investment: int.tryParse(invest.text) ?? 0,
-          expense: int.tryParse(expense.text) ?? 0,
-          sector: sector,
-        );
-      }
+      await safeMutate(context, () async {
+        if (existing == null) {
+          await store.addProject(
+            name: name.text.trim(),
+            description: desc.text.trim(),
+            stage: stage,
+            requiredBudget: int.tryParse(required.text) ?? 0,
+            investment: int.tryParse(invest.text) ?? 0,
+            expense: int.tryParse(expense.text) ?? 0,
+            sector: sector,
+          );
+        } else {
+          await store.updateProject(
+            projectId: existing.id,
+            name: name.text.trim(),
+            description: desc.text.trim(),
+            stage: stage,
+            requiredBudget: int.tryParse(required.text) ?? 0,
+            investment: int.tryParse(invest.text) ?? 0,
+            expense: int.tryParse(expense.text) ?? 0,
+            sector: sector,
+          );
+        }
+      });
     }
   }
 
@@ -453,10 +460,13 @@ class ProjectsPage extends StatelessWidget {
       ),
     );
     if (ok == true && emp != null && part.text.trim().isNotEmpty) {
-      store.assignEmployeeToProjectPart(
-        projectId: projectId,
-        partName: part.text.trim(),
-        employeeId: emp!.id,
+      await safeMutate(
+        context,
+        () => store.assignEmployeeToProjectPart(
+          projectId: projectId,
+          partName: part.text.trim(),
+          employeeId: emp!.id,
+        ),
       );
     }
   }
